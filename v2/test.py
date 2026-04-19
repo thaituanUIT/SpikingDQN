@@ -4,6 +4,7 @@ import os
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
+import csv
 
 from v2.data.voc import VOCDataset
 from v2.agents.localization_agent import LocalizationAgent
@@ -11,10 +12,12 @@ from v2.models.surrogate import SQNSurrogate
 from v2.models.ats import SQNConverted
 from v2.models.stdp import SQNSTDP
 
-def test_model(agent, dataset, render=True):
+def test_model(agent, dataset, render=True, logging=False, output_file='test_results.csv'):
     print(f"\n--- Starting Evaluation on {len(dataset)} samples ---")
     
     total_iou = []
+    total_steps = []
+    log_data = []
     
     for idx in range(len(dataset)):
         sample = dataset[idx]
@@ -55,6 +58,15 @@ def test_model(agent, dataset, render=True):
         final_mask = current_mask
         iou = agent.compute_iou(final_mask, ground_truth)
         total_iou.append(iou)
+        total_steps.append(step)
+        
+        log_data.append({
+            'Image_ID': idx+1,
+            'Ground_Truth': tuple(ground_truth),
+            'Prediction': tuple(final_mask),
+            'Steps': step,
+            'IoU': iou
+        })
         
         print(f"Sample {idx+1}: IoU = {iou:.4f}, Steps taken = {step}")
         
@@ -80,18 +92,38 @@ def test_model(agent, dataset, render=True):
     if render:
         cv2.destroyAllWindows()
         
-    avg_iou = sum(total_iou) / len(total_iou) if total_iou else 0
-    print(f"\n--- Evaluation Complete ---")
+    avg_iou = np.mean(total_iou) if total_iou else 0
+    avg_steps = np.mean(total_steps) if total_steps else 0
+    
+    acc_03 = sum(1 for iou in total_iou if iou >= 0.3) / len(total_iou) if total_iou else 0
+    acc_05 = sum(1 for iou in total_iou if iou >= 0.5) / len(total_iou) if total_iou else 0
+    acc_07 = sum(1 for iou in total_iou if iou >= 0.7) / len(total_iou) if total_iou else 0
+    
+    print(f"\n--- Evaluation Metrics ---")
     print(f"Average Final IoU: {avg_iou:.4f}")
+    print(f"Average Steps Taken: {avg_steps:.2f}")
+    print(f"Localization Accuracy (IoU >= 0.3): {acc_03*100:.2f}%")
+    print(f"Localization Accuracy (IoU >= 0.5): {acc_05*100:.2f}%")
+    print(f"Localization Accuracy (IoU >= 0.7): {acc_07*100:.2f}%")
+    
+    if logging:
+        os.makedirs('logs', exist_ok=True)
+        csv_path = os.path.join('logs', output_file)
+        with open(csv_path, mode='w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=['Image_ID', 'Ground_Truth', 'Prediction', 'Steps', 'IoU'])
+            writer.writeheader()
+            writer.writerows(log_data)
+        print(f"-> Detailed metrics logged to {csv_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Testing (v2)")
     parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
-    parser.add_argument('--backbone', type=str, choices=['custom', 'vgg16'], default='custom')
+    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16'], default='conv')
     parser.add_argument('--target', type=str, default='mixing')
     parser.add_argument('--num-samples', type=int, default=10) # Test on 10 samples by default
     parser.add_argument('--simulate', type=int, default=10)
     parser.add_argument('--render', action='store_true', help="Show images with bounding boxes")
+    parser.add_argument('--logging', action='store_true', help="Log metrics to CSV")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -123,7 +155,8 @@ def main():
     # Agent wrapper (optimizer not needed for eval)
     agent = LocalizationAgent(model=model, device=device)
     
-    test_model(agent, dataset, render=args.render)
+    csv_file = f"test_{args.method}_{args.target}_{args.backbone}.csv"
+    test_model(agent, dataset, render=args.render, logging=args.logging, output_file=csv_file)
 
 if __name__ == '__main__':
     main()

@@ -68,4 +68,4 @@ python v2/test.py --method ats --target mixing --backbone vgg16
 ```
 
 ## Dataset 
-Our dataset is the PASCAL VOC 2012 dataset, which is a collection of images of objects in different categories. Link to dataset: 
+Our dataset is the PASCAL VOC 2012 dataset, which is a collection of images of objects in different categories. Available at: https://drive.google.com/drive/folders/1ikKFR2nbdLw-W6cazaVYyYXCNUeXW6E7?usp=sharing

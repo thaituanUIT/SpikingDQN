@@ -83,7 +83,7 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Training (v2)")
     parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True, help="SNN method to use")
-    parser.add_argument('--backbone', type=str, choices=['custom', 'vgg16'], default='custom', help="Feature extractor backbone")
+    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16'], default='conv', help="Feature extractor backbone")
     parser.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
     parser.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
     parser.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
@@ -108,7 +108,7 @@ def main():
         model = SQNConverted(simulation_time=args.simulate, use_vgg16=(args.backbone == 'vgg16'))
     elif args.method == 'stdp':
         if args.backbone == 'vgg16':
-            raise ValueError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
+            raise NotImplementedError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
         model = SQNSTDP()
         
     model = model.to(device)
