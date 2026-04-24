@@ -4,11 +4,11 @@ import torch.optim as optim
 import os
 import numpy as np
 
-from v2.data.voc import VOCDataset
-from v2.agents.localization_agent import LocalizationAgent
-from v2.models.surrogate import SQNSurrogate
-from v2.models.ats import SQNConverted
-from v2.models.stdp import SQNSTDP
+from data.voc import VOCDataset
+from agents.localization_agent import LocalizationAgent
+from models.surrogate import SQNSurrogate
+from models.ats import SQNConverted
+from models.stdp import SQNSTDP
 
 def train_stdp_pretraining(model, dataset, device):
     """Unsupervised STDP Pre-training phase for the Backbone"""
@@ -94,7 +94,7 @@ def main():
     print(f"Using device: {device}")
     
     # 1. Load Data
-    voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'VOC2012')
+    voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
     dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
     
     if len(dataset) == 0:

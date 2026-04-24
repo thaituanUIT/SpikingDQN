@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
-from v2.backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone
+from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone
 
 class SuperSpike(torch.autograd.Function):
     """

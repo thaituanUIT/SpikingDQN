@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
-from v2.backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone
+from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone
 
 class SQNConverted(nn.Module):
     def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, backbone_name='conv'):
