@@ -76,7 +76,7 @@ def render_predictions(agent, dataset, num_images=5):
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Visualization (v2)")
     parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
-    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16'], default='conv')
+    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv')
     parser.add_argument('--target', type=str, default='mixing')
     parser.add_argument('--num-images', type=int, default=5, help="Number of images to render")
     parser.add_argument('--simulate', type=int, default=10)
@@ -88,9 +88,9 @@ def main():
     dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_images)
     
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, use_vgg16=(args.backbone == 'vgg16'))
+        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, use_vgg16=(args.backbone == 'vgg16'))
+        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone)
         model.is_snn = True
     elif args.method == 'stdp':
         if args.backbone == 'vgg16':

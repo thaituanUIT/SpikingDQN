@@ -2,40 +2,29 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models as models
 import torchvision.transforms as T
+from v2.backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone
 
 class SQNConverted(nn.Module):
-    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, use_vgg16=False):
+    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, backbone_name='conv'):
         super(SQNConverted, self).__init__()
         
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.history_dim = history_dim
         self.simulation_time = simulation_time
-        self.use_vgg16 = use_vgg16
+        self.backbone_name = backbone_name
         
         self.is_snn = False # Flag indicating if it has been converted
         
-        if self.use_vgg16:
-            vgg16 = models.vgg16(pretrained=True)
-            self.conv = vgg16.features
-            for param in self.conv.parameters():
-                param.requires_grad = False
-            self.fc_input_dim = 25088 + self.history_dim
-            self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        if self.backbone_name == 'vgg16':
+            self.backbone = VGG16Backbone()
+        elif self.backbone_name == 'resnet18':
+            self.backbone = ResNetBackbone(model_name='resnet18')
         else:
-            self.conv = nn.Sequential(
-                nn.Conv2d(self.input_dim[0], 32, kernel_size=8, stride=4),
-                nn.ReLU(),
-                nn.Conv2d(32, 64, kernel_size=4, stride=2),
-                nn.ReLU(),
-                nn.Conv2d(64, 64, kernel_size=3, stride=1),
-                nn.ReLU()
-            )
-            dummy = torch.zeros(1, *self.input_dim)
-            conv_out_size = self.conv(dummy).reshape(1, -1).size(1)
-            self.fc_input_dim = conv_out_size + self.history_dim
+            self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
+            
+        self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
         self.fc = nn.Sequential(
             nn.Linear(self.fc_input_dim, 128),
@@ -48,12 +37,7 @@ class SQNConverted(nn.Module):
     def forward(self, state, history):
         if not self.is_snn:
             # Standard ANN Forward pass
-            if self.use_vgg16:
-                state = self.normalize(state)
-                with torch.no_grad():
-                    features = self.conv(state).reshape(state.size(0), -1)
-            else:
-                features = self.conv(state).reshape(state.size(0), -1)
+            features = self.backbone(state)
                 
             x = torch.cat([features, history], dim=1)
             q_values = self.fc(x)
@@ -65,13 +49,11 @@ class SQNConverted(nn.Module):
             
             out_v = torch.zeros(state_size, self.output_dim, device=device)
             
-            # Since VGG16 relies on heavy pooling and continuous weights, 
-            # ATS conversion normally skips VGG and only applies to the trained RL head
-            # Or we can treat VGG output as a constant current.
-            if self.use_vgg16:
-                state = self.normalize(state)
+            # ATS conversion normally skips VGG/ResNet and only applies to the trained RL head
+            # Or we can treat pre-trained output as a constant current.
+            if self.backbone_name in ['vgg16', 'resnet18']:
                 with torch.no_grad():
-                    constant_features = self.conv(state).reshape(state_size, -1)
+                    constant_features = self.backbone(state)
             
             mem_conv = [None] * 4 # Adjust if needed
             mem_fc = [None] * 2
@@ -85,7 +67,7 @@ class SQNConverted(nn.Module):
                 else:
                     # Manual pass through layers to track membrane potentials
                     c_idx = 0
-                    for layer in self.conv:
+                    for layer in self.backbone.get_layers():
                         if isinstance(layer, nn.Conv2d):
                             x_in = layer(x_in)
                         elif isinstance(layer, nn.ReLU):
