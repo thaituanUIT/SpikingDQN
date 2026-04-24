@@ -2,7 +2,7 @@ import argparse
 import torch
 import os
 import numpy as np
-import csv
+import cv2
 
 from v2.data.voc import VOCDataset
 from v2.agents.localization_agent import LocalizationAgent
@@ -10,14 +10,10 @@ from v2.models.surrogate import SQNSurrogate
 from v2.models.ats import SQNConverted
 from v2.models.stdp import SQNSTDP
 
-def test_model(agent, dataset, logging=False, output_file='test_results.csv'):
-    print(f"\n--- Starting Evaluation on {len(dataset)} samples ---")
+def render_predictions(agent, dataset, num_images=5):
+    print(f"\n--- Rendering Visualizations for {num_images} samples ---")
     
-    total_iou = []
-    total_steps = []
-    log_data = []
-    
-    for idx in range(len(dataset)):
+    for idx in range(min(num_images, len(dataset))):
         sample = dataset[idx]
         image = sample['image']
         ground_truth = sample['box']
@@ -30,12 +26,10 @@ def test_model(agent, dataset, logging=False, output_file='test_results.csv'):
         done = False
         masks = []
         
-        # Test Loop (greedy policy)
+        # Simulation Loop (greedy policy)
         while not done and step < agent.max_steps:
-            # feature extraction
             img_tensor, hist_tensor = agent.feature_extract(image, history, width, height, current_mask)
             
-            # Predict action (epsilon = 0.0 for greedy)
             agent.model.eval()
             with torch.no_grad():
                 q_values = agent.model(img_tensor.to(agent.device), hist_tensor.to(agent.device))
@@ -54,85 +48,68 @@ def test_model(agent, dataset, logging=False, output_file='test_results.csv'):
             step += 1
             
         final_mask = current_mask
-        iou = agent.compute_iou(final_mask, ground_truth)
-        total_iou.append(iou)
-        total_steps.append(step)
         
-        log_data.append({
-            'Image_ID': idx+1,
-            'Ground_Truth': tuple(ground_truth),
-            'Prediction': tuple(final_mask),
-            'Steps': step,
-            'IoU': iou
-        })
+        # Visualization
+        vis_img = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
         
-        print(f"Sample {idx+1}: IoU = {iou:.4f}, Steps taken = {step}")
+        # Draw ground truth (Green)
+        cv2.rectangle(vis_img, (int(ground_truth[0]), int(ground_truth[1])), 
+                      (int(ground_truth[2]), int(ground_truth[3])), (0, 255, 0), 2)
         
-        
-    avg_iou = np.mean(total_iou) if total_iou else 0
-    avg_steps = np.mean(total_steps) if total_steps else 0
-    
-    acc_03 = sum(1 for iou in total_iou if iou >= 0.3) / len(total_iou) if total_iou else 0
-    acc_05 = sum(1 for iou in total_iou if iou >= 0.5) / len(total_iou) if total_iou else 0
-    acc_07 = sum(1 for iou in total_iou if iou >= 0.7) / len(total_iou) if total_iou else 0
-    
-    print(f"\n--- Evaluation Metrics ---")
-    print(f"Average Final IoU: {avg_iou:.4f}")
-    print(f"Average Steps Taken: {avg_steps:.2f}")
-    print(f"Localization Accuracy (IoU >= 0.3): {acc_03*100:.2f}%")
-    print(f"Localization Accuracy (IoU >= 0.5): {acc_05*100:.2f}%")
-    print(f"Localization Accuracy (IoU >= 0.7): {acc_07*100:.2f}%")
-    
-    if logging:
-        os.makedirs('logs', exist_ok=True)
-        csv_path = os.path.join('logs', output_file)
-        with open(csv_path, mode='w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Image_ID', 'Ground_Truth', 'Prediction', 'Steps', 'IoU'])
-            writer.writeheader()
-            writer.writerows(log_data)
-        print(f"-> Detailed metrics logged to {csv_path}")
+        # Draw intermediate predictions (Blue, thin)
+        for m in masks[:-1]:
+             cv2.rectangle(vis_img, (int(m[0]), int(m[1])), 
+                      (int(m[2]), int(m[3])), (255, 0, 0), 1)
+
+        # Draw final prediction (Red)
+        cv2.rectangle(vis_img, (int(final_mask[0]), int(final_mask[1])), 
+                      (int(final_mask[2]), int(final_mask[3])), (0, 0, 255), 2)
+                      
+        print(f"Sample {idx+1}: Displaying result...")
+        cv2.imshow(f"Visualization - Sample {idx+1}", vis_img)
+        print("Press any key to see the next image...")
+        cv2.waitKey(0)
+            
+    cv2.destroyAllWindows()
+    print("--- Visualization Complete ---")
 
 def main():
-    parser = argparse.ArgumentParser(description="Active Object Localization Testing (v2)")
+    parser = argparse.ArgumentParser(description="Active Object Localization Visualization (v2)")
     parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
     parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16'], default='conv')
     parser.add_argument('--target', type=str, default='mixing')
-    parser.add_argument('--num-samples', type=int, default=10) # Test on 10 samples by default
+    parser.add_argument('--num-images', type=int, default=5, help="Number of images to render")
     parser.add_argument('--simulate', type=int, default=10)
-    parser.add_argument('--logging', action='store_true', help="Log metrics to CSV")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'VOC2012')
-    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
+    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_images)
     
     if args.method == 'surrogate':
         model = SQNSurrogate(simulation_time=args.simulate, use_vgg16=(args.backbone == 'vgg16'))
     elif args.method == 'ats':
         model = SQNConverted(simulation_time=args.simulate, use_vgg16=(args.backbone == 'vgg16'))
-        model.is_snn = True # Set to SNN mode for evaluation
+        model.is_snn = True
     elif args.method == 'stdp':
         if args.backbone == 'vgg16':
             raise ValueError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
         model = SQNSTDP()
-        model.set_pretrain_mode(False) # Ensure RL head is active
+        model.set_pretrain_mode(False)
         
     model = model.to(device)
     
-    # Load weights
     weight_path = f"weights/{args.method}_{args.target}.pth"
     if os.path.exists(weight_path):
         model.load_state_dict(torch.load(weight_path, map_location=device))
         print(f"Loaded weights from {weight_path}")
     else:
-        print(f"Warning: Weights not found at {weight_path}. Evaluating with random weights.")
+        print(f"Error: Weights not found at {weight_path}. Cannot render without trained weights.")
+        return
         
-    # Agent wrapper (optimizer not needed for eval)
     agent = LocalizationAgent(model=model, device=device)
-    
-    csv_file = f"test_{args.method}_{args.target}_{args.backbone}.csv"
-    test_model(agent, dataset, logging=args.logging, output_file=csv_file)
+    render_predictions(agent, dataset, num_images=args.num_images)
 
 if __name__ == '__main__':
     main()

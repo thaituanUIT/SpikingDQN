@@ -1,4 +1,4 @@
-"""Implementation for SNN converted from ANN"""
+"""Implementation for SNN converted from ANN (ANN-to-SNN)"""
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
