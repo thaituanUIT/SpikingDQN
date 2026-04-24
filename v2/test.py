@@ -4,11 +4,11 @@ import os
 import numpy as np
 import csv
 
-from v2.data.voc import VOCDataset
-from v2.agents.localization_agent import LocalizationAgent
-from v2.models.surrogate import SQNSurrogate
-from v2.models.ats import SQNConverted
-from v2.models.stdp import SQNSTDP
+from data.voc import VOCDataset
+from agents.localization_agent import LocalizationAgent
+from models.surrogate import SQNSurrogate
+from models.ats import SQNConverted
+from models.stdp import SQNSTDP
 
 def test_model(agent, dataset, logging=False, output_file='test_results.csv'):
     print(f"\n--- Starting Evaluation on {len(dataset)} samples ---")
@@ -95,7 +95,7 @@ def test_model(agent, dataset, logging=False, output_file='test_results.csv'):
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Testing (v2)")
     parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
-    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16'], default='conv')
+    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv')
     parser.add_argument('--target', type=str, default='mixing')
     parser.add_argument('--num-samples', type=int, default=10) # Test on 10 samples by default
     parser.add_argument('--simulate', type=int, default=10)
@@ -104,13 +104,13 @@ def main():
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'VOC2012')
+    voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
     dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
     
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, use_vgg16=(args.backbone == 'vgg16'))
+        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, use_vgg16=(args.backbone == 'vgg16'))
+        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone)
         model.is_snn = True # Set to SNN mode for evaluation
     elif args.method == 'stdp':
         if args.backbone == 'vgg16':

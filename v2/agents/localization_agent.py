@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from collections import deque
-from v2.data.preprocess import crop_and_resize
+from data.preprocess import crop_and_resize
 
 class ReplayBuffer:
     def __init__(self, capacity):

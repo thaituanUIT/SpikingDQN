@@ -1,8 +1,8 @@
 """Implementation for SNN with Surrogate Gradient learning"""
 import torch
 import torch.nn as nn
-import torchvision.models as models
 import torchvision.transforms as T
+from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone
 
 class SuperSpike(torch.autograd.Function):
     """
@@ -26,14 +26,14 @@ class SuperSpike(torch.autograd.Function):
 
 class SQNSurrogate(nn.Module):
     def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, 
-                 simulation_time=10, alpha=0.9, beta=0.8, threshold=1.0, use_vgg16=False):
+                 simulation_time=10, alpha=0.9, beta=0.8, threshold=1.0, backbone_name='conv'):
         super(SQNSurrogate, self).__init__()
         
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.history_dim = history_dim
         self.simulation_time = simulation_time
-        self.use_vgg16 = use_vgg16
+        self.backbone_name = backbone_name
 
         
         self.alpha = alpha
@@ -41,25 +41,14 @@ class SQNSurrogate(nn.Module):
         self.threshold = threshold
         self.spike_fn = SuperSpike.apply
 
-        if self.use_vgg16:
-            vgg16 = models.vgg16(pretrained=True)
-            self.conv = vgg16.features
-            for param in self.conv.parameters():
-                param.requires_grad = False
-            self.fc_input_dim = 25088 + self.history_dim
-            self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+        if self.backbone_name == 'vgg16':
+            self.backbone = VGG16Backbone()
+        elif self.backbone_name == 'resnet18':
+            self.backbone = ResNetBackbone(model_name='resnet18')
         else:
-            self.conv = nn.Sequential(
-                nn.Conv2d(self.input_dim[0], 32, kernel_size=8, stride=4),
-                nn.ReLU(),
-                nn.Conv2d(32, 64, kernel_size=4, stride=2),
-                nn.ReLU(),
-                nn.Conv2d(64, 64, kernel_size=3, stride=1),
-                nn.ReLU()
-            )
-            dummy = torch.zeros(1, *self.input_dim)
-            conv_out_size = self.conv(dummy).reshape(1, -1).size(1)
-            self.fc_input_dim = conv_out_size + self.history_dim
+            self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
+            
+        self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
         self.fc1 = nn.Linear(self.fc_input_dim, 128)
         self.fc2 = nn.Linear(128, 256)
@@ -70,12 +59,7 @@ class SQNSurrogate(nn.Module):
         device = state.device
 
         # 1. Feature Extraction
-        if self.use_vgg16:
-            state = self.normalize(state)
-            with torch.no_grad():
-                features = self.conv(state).reshape(batch_size, -1)
-        else:
-            features = self.conv(state).reshape(batch_size, -1)
+        features = self.backbone(state)
             
         x_fc_base = torch.cat([features, history], dim=1)
 

@@ -4,11 +4,11 @@ import torch.optim as optim
 import os
 import numpy as np
 
-from v2.data.voc import VOCDataset
-from v2.agents.localization_agent import LocalizationAgent
-from v2.models.surrogate import SQNSurrogate
-from v2.models.ats import SQNConverted
-from v2.models.stdp import SQNSTDP
+from data.voc import VOCDataset
+from agents.localization_agent import LocalizationAgent
+from models.surrogate import SQNSurrogate
+from models.ats import SQNConverted
+from models.stdp import SQNSTDP
 
 def train_stdp_pretraining(model, dataset, device):
     """Unsupervised STDP Pre-training phase for the Backbone"""
@@ -83,7 +83,7 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Training (v2)")
     parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True, help="SNN method to use")
-    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16'], default='conv', help="Feature extractor backbone")
+    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv', help="Feature extractor backbone")
     parser.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
     parser.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
     parser.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
@@ -94,7 +94,7 @@ def main():
     print(f"Using device: {device}")
     
     # 1. Load Data
-    voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'VOC2012')
+    voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
     dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
     
     if len(dataset) == 0:
@@ -103,9 +103,9 @@ def main():
 
     # 2. Initialize Model
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, use_vgg16=(args.backbone == 'vgg16'))
+        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, use_vgg16=(args.backbone == 'vgg16'))
+        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone)
     elif args.method == 'stdp':
         if args.backbone == 'vgg16':
             raise NotImplementedError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
