@@ -95,7 +95,7 @@ def main():
     
     # 1. Load Data
     voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
-    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
+    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples, use_random=True)
     
     if len(dataset) == 0:
         print("No valid samples found. Exiting.")

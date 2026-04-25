@@ -100,12 +100,13 @@ def main():
     parser.add_argument('--num-samples', type=int, default=10) # Test on 10 samples by default
     parser.add_argument('--simulate', type=int, default=10)
     parser.add_argument('--logging', action='store_true', help="Log metrics to CSV")
+    parser.add_argument('--random', action='store_true', help="Use random samples for testing")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
-    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
+    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples, use_random=args.random)
     
     if args.method == 'surrogate':
         model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone)
