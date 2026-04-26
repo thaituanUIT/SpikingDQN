@@ -3,6 +3,8 @@ import torch
 import torch.optim as optim
 import os
 import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
 
 from data.voc import VOCDataset
 from agents.localization_agent import LocalizationAgent
@@ -38,6 +40,10 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
     """Standard DQN Training Loop"""
     epsilon = epsilon_start
     epsilon_decay = (epsilon_start - epsilon_min) / decay_steps
+    
+    # Track logs
+    history_loss = []
+    history_epsilon = []
     
     for epoch in range(1, epochs + 1):
         print(f"\n--- Epoch {epoch}/{epochs} ---")
@@ -77,8 +83,50 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
         avg_loss = sum(epoch_loss) / len(epoch_loss) if epoch_loss else 0
         print(f"Epoch {epoch} Results: Avg Loss = {avg_loss:.4f}, Total Reward = {epoch_reward}, Epsilon = {epsilon:.2f}")
         
+        history_loss.append(avg_loss)
+        history_epsilon.append(epsilon)
+        
         if epsilon > epsilon_min:
             epsilon -= epsilon_decay
+
+    return history_loss, history_epsilon
+
+def plot_training_results(losses, epsilons, method, target):
+    """Save training metrics to CSV and plot them"""
+    os.makedirs('logs', exist_ok=True)
+    
+    # Save to CSV
+    df = pd.DataFrame({
+        'epoch': range(1, len(losses) + 1),
+        'loss': losses,
+        'epsilon': epsilons
+    })
+    csv_path = f"logs/{method}_{target}_training_log.csv"
+    df.to_csv(csv_path, index=False)
+    print(f"Training logs saved to {csv_path}")
+    
+    # Plotting
+    fig, ax1 = plt.subplots(figsize=(10, 6))
+
+    color = 'tab:red'
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Loss', color=color)
+    ax1.plot(range(1, len(losses) + 1), losses, color=color, label='Loss')
+    ax1.tick_params(axis='y', labelcolor=color)
+
+    ax2 = ax1.twinx()
+    color = 'tab:blue'
+    ax2.set_ylabel('Epsilon', color=color)
+    ax2.plot(range(1, len(epsilons) + 1), epsilons, color=color, label='Epsilon')
+    ax2.tick_params(axis='y', labelcolor=color)
+
+    plt.title(f"Training Metrics ({method} - {target})")
+    fig.tight_layout()
+    
+    plot_path = f"logs/{method}_{target}_metrics.png"
+    plt.savefig(plot_path)
+    print(f"Training plot saved to {plot_path}")
+    plt.close()
 
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Training (v2)")
@@ -88,6 +136,7 @@ def main():
     parser.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
     parser.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
     parser.add_argument('--epochs', type=int, default=10, help="Number of RL epochs")
+    parser.add_argument('--logging', action='store_true', help="Enable logging")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -125,7 +174,10 @@ def main():
     
     # 5. Train RL
     print(f"Starting RL Loop using {args.method} mechanism...")
-    run_rl_training(agent, dataset, epochs=args.epochs)
+    losses, epsilons = run_rl_training(agent, dataset, epochs=args.epochs)
+    
+    if args.logging:
+        plot_training_results(losses, epsilons, args.method, args.target)
     
     # 6. ATS Conversion (if applicable)
     if args.method == 'ats':

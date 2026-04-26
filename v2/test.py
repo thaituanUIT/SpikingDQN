@@ -59,11 +59,11 @@ def test_model(agent, dataset, logging=False, output_file='test_results.csv'):
         total_steps.append(step)
         
         log_data.append({
-            'Image_ID': idx+1,
-            'Ground_Truth': tuple(ground_truth),
-            'Prediction': tuple(final_mask),
-            'Steps': step,
-            'IoU': iou
+            'Image_ID': int(idx+1),
+            'Ground_Truth': tuple(ground_truth.tolist()),
+            'Prediction': tuple(final_mask.tolist()),
+            'Steps': int(step),
+            'IoU': float(iou)
         })
         
         print(f"Sample {idx+1}: IoU = {iou:.4f}, Steps taken = {step}")
@@ -84,13 +84,13 @@ def test_model(agent, dataset, logging=False, output_file='test_results.csv'):
     print(f"Localization Accuracy (IoU >= 0.7): {acc_07*100:.2f}%")
     
     if logging:
-        os.makedirs('logs', exist_ok=True)
-        csv_path = os.path.join('logs', output_file)
+        os.makedirs('eval', exist_ok=True)
+        csv_path = os.path.join('eval', output_file)
         with open(csv_path, mode='w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=['Image_ID', 'Ground_Truth', 'Prediction', 'Steps', 'IoU'])
             writer.writeheader()
             writer.writerows(log_data)
-        print(f"-> Detailed metrics logged to {csv_path}")
+        print(f"-> Detailed metrics saved to {csv_path}")
 
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Testing (v2)")
