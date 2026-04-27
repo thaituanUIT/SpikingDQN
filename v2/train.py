@@ -169,7 +169,7 @@ def main():
     if len(dataset) == 0:
         print("No valid samples found. Exiting.")
         return
- 
+
     # 2. Initialize Model
     if args.method == 'surrogate':
         model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone)
