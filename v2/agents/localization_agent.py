@@ -22,7 +22,8 @@ class ReplayBuffer:
 
 class LocalizationAgent:
     def __init__(self, model, optimizer=None, device='cpu', 
-                 gamma=0.1, max_steps=20, action_options=9, history_size=10):
+                 gamma=0.1, max_steps=20, action_options=9, history_size=10,
+                 clip_grad=1.0):
         self.model = model.to(device)
         self.optimizer = optimizer
         self.device = device
@@ -34,6 +35,7 @@ class LocalizationAgent:
         
         self.memory = ReplayBuffer(capacity=1000)
         self.loss_fn = nn.HuberLoss()
+        self.clip_grad = clip_grad
         
     def get_action(self, image_tensor, history_tensor, epsilon, current_mask, ground_truth):
         """
@@ -201,6 +203,10 @@ class LocalizationAgent:
         
         loss = self.loss_fn(q_acts, target_q)
         loss.backward()
+        
+        if self.clip_grad > 0:
+            torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.clip_grad)
+            
         self.optimizer.step()
         
         return loss.item()
