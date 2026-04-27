@@ -9,7 +9,7 @@ class VOCDataset(Dataset):
     """
     Dataset loader for VOC2012 for Active Object Localization.
     """
-    def __init__(self, root_dir, target_class="mixing", num_samples=None, split="train"):
+    def __init__(self, root_dir, target_class="mixing", num_samples=None, split="train", use_random=False):
         """
         Args:
             root_dir (str): Path to VOC2012 directory.
@@ -17,9 +17,11 @@ class VOCDataset(Dataset):
             num_samples (int): Max number of samples to load (useful for testing/limiting size).
             split (str): 'train' or 'val'. By default we just load all images if no specific ImageSets are used, 
                          or we can parse ImageSets/Main/train.txt if needed. For simplicity we will read the dir.
+            use_random (bool): Whether to randomly shuffle samples before selection.
         """
         self.root_dir = root_dir
         self.target_class = target_class
+        self.use_random = use_random
         
         self.annotations_dir = os.path.join(root_dir, 'Annotations')
         self.images_dir = os.path.join(root_dir, 'JPEGImages')
@@ -35,8 +37,9 @@ class VOCDataset(Dataset):
         all_xmls = sorted(os.listdir(self.annotations_dir))
         
         # Only use a deterministic subset for randomness testing if not using exact splits
-        random.seed(42)
-        random.shuffle(all_xmls)
+        if self.use_random:
+            random.seed(42)
+            random.shuffle(all_xmls)
 
         for xml_file in all_xmls:
             if num_samples is not None and len(self.samples) >= num_samples:
