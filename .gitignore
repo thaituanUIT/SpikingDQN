@@ -5,3 +5,5 @@ VOC2012/
 __pycache__/
 setup.sh
 weights/
+logs/
+eval/
