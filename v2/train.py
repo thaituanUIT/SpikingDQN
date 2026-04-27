@@ -12,6 +12,23 @@ from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
 from models.stdp import SQNSTDP
 
+def get_optimizer(model, opt_name, lr):
+    """Factory function to create the requested optimizer"""
+    parameters = filter(lambda p: p.requires_grad, model.parameters())
+    
+    if opt_name == 'adam':
+        return optim.Adam(parameters, lr=lr)
+    elif opt_name == 'adamw':
+        return optim.AdamW(parameters, lr=lr, weight_decay=0.01)
+    elif opt_name == 'rmsprop':
+        return optim.RMSprop(parameters, lr=lr, alpha=0.99, eps=1e-8)
+    elif opt_name == 'sgd':
+        return optim.SGD(parameters, lr=lr, momentum=0.9)
+    elif opt_name == 'radam':
+        return optim.RAdam(parameters, lr=lr)
+    else:
+        raise ValueError(f"Unknown optimizer: {opt_name}")
+
 def train_stdp_pretraining(model, dataset, device):
     """Unsupervised STDP Pre-training phase for the Backbone"""
     print("\n--- Starting Unsupervised STDP Pre-training ---")
@@ -136,6 +153,9 @@ def main():
     parser.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
     parser.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
     parser.add_argument('--epochs', type=int, default=10, help="Number of RL epochs")
+    parser.add_argument('--optimizer', type=str, choices=['adam', 'adamw', 'rmsprop', 'sgd', 'radam'], default='adam', help="Optimizer to use")
+    parser.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
+    parser.add_argument('--clip-grad', type=float, default=1.0, help="Gradient clipping norm")
     parser.add_argument('--logging', action='store_true', help="Enable logging")
     args = parser.parse_args()
     
@@ -149,7 +169,7 @@ def main():
     if len(dataset) == 0:
         print("No valid samples found. Exiting.")
         return
-
+ 
     # 2. Initialize Model
     if args.method == 'surrogate':
         model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone)
@@ -161,16 +181,16 @@ def main():
         model = SQNSTDP()
         
     model = model.to(device)
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = get_optimizer(model, args.optimizer, args.lr)
     
     # 3. Handle STDP Specifics
     if args.method == 'stdp':
         train_stdp_pretraining(model, dataset, device)
         # Re-initialize optimizer because STDP freezes some layers and we only want RL head to train
-        optimizer = optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=1e-4)
+        optimizer = get_optimizer(model, args.optimizer, args.lr)
 
     # 4. Initialize Agent
-    agent = LocalizationAgent(model=model, optimizer=optimizer, device=device)
+    agent = LocalizationAgent(model=model, optimizer=optimizer, device=device, clip_grad=args.clip_grad)
     
     # 5. Train RL
     print(f"Starting RL Loop using {args.method} mechanism...")
