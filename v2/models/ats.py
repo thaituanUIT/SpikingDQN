@@ -62,7 +62,7 @@ class SQNConverted(nn.Module):
             for t in range(self.simulation_time):
                 x_in = state
                 
-                if self.use_vgg16:
+                if self.backbone_name in ['vgg16', 'resnet18']:
                     features = constant_features
                 else:
                     # Manual pass through layers to track membrane potentials

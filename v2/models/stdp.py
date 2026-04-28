@@ -81,29 +81,35 @@ class STDPConv2d(nn.Module):
         if is_training_stdp:
             # Simplified STDP: Potentiate weights for the winning features based on input activity
             with torch.no_grad():
-                # We update weights of the winning filters.
-                # For a full implementation, you'd iterate over the spike times. 
-                # Here we do a simplified Hebbian update for demonstration:
-                
                 # Unfold input to patches
                 patches = F.unfold(active_mask, kernel_size=self.kernel_size, padding=self.kernel_size//2)
                 patches = patches.view(batch_size, self.in_channels, self.kernel_size, self.kernel_size, H, W)
                 
-                # Calculate delta_w (Simplified: if pre fired and post fired -> +lr_plus, if post fired and pre didn't -> -lr_minus)
-                for b in range(batch_size):
-                    for x in range(W):
-                        for y in range(H):
-                            winner_idx = winners[b, 0, y, x]
-                            if fire_mask[b, 0, y, x] > 0:
-                                pre_activity = patches[b, :, :, :, y, x]
-                                
-                                # LTP
-                                self.weight[winner_idx] += self.lr_plus * pre_activity * (1.0 - self.weight[winner_idx])
-                                # LTD
-                                self.weight[winner_idx] -= self.lr_minus * (1.0 - pre_activity) * self.weight[winner_idx]
-                                
-                # Keep weights [0, 1]
-                self.weight.clamp_(0.0, 1.0)
+                # Flatten spatial and batch dimensions
+                patches_permuted = patches.permute(0, 4, 5, 1, 2, 3).reshape(-1, self.in_channels, self.kernel_size, self.kernel_size)
+                winners_flat = winners.view(-1)
+                fire_mask_flat = fire_mask.view(-1)
+                
+                # Find where a spike actually occurred
+                valid_indices = torch.nonzero(fire_mask_flat > 0).squeeze(-1)
+                
+                if valid_indices.numel() > 0:
+                    valid_winners = winners_flat[valid_indices]
+                    valid_pre_activity = patches_permuted[valid_indices]
+                    
+                    # Gather current weights for valid locations
+                    w_selected = self.weight[valid_winners]
+                    
+                    # Calculate weight updates (LTP and LTD)
+                    delta_w = self.lr_plus * valid_pre_activity * (1.0 - w_selected) \
+                              - self.lr_minus * (1.0 - valid_pre_activity) * w_selected
+                              
+                    # Accumulate and apply updates
+                    total_delta_w = torch.zeros_like(self.weight)
+                    total_delta_w.index_add_(0, valid_winners, delta_w)
+                    
+                    self.weight += total_delta_w
+                    self.weight.clamp_(0.0, 1.0)
                 
         # Return out latencies (we approximate latency based on potential)
         out_latencies = (T_max - max_potentials) * out_spikes
