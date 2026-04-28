@@ -22,8 +22,8 @@ class ReplayBuffer:
 
 class LocalizationAgent:
     def __init__(self, model, optimizer=None, device='cpu', 
-                 gamma=0.1, max_steps=20, action_options=9, history_size=10,
-                 clip_grad=1.0):
+                 gamma=0.9, max_steps=20, action_options=9, history_size=10,
+                 clip_grad=1.0, alpha=0.1, nu=3.0, threshold=0.5):
         self.model = model.to(device)
         self.optimizer = optimizer
         self.device = device
@@ -37,6 +37,10 @@ class LocalizationAgent:
         self.loss_fn = nn.HuberLoss()
         self.clip_grad = clip_grad
         
+        self.alpha = alpha
+        self.nu = nu
+        self.threshold = threshold
+        
     def get_action(self, image_tensor, history_tensor, epsilon, current_mask, ground_truth):
         """
         Selects action using epsilon-greedy policy. 
@@ -49,27 +53,26 @@ class LocalizationAgent:
             self.model.train()
             action = torch.argmax(q_values).item()
         else:
-            # Random action exploration guided by positive reward (like v1)
-            finish_reward = self.compute_finish_reward(current_mask, ground_truth)
-            if finish_reward > 0:
-                action = 8
-            else:
-                rewards = []
-                for i in range(self.action_options - 1):
-                    reward = self.compute_reward(i, current_mask, ground_truth)
-                    rewards.append(reward)
-                positive_idx = np.where(np.array(rewards) >= 0)[0]
-                
-                if len(positive_idx) == 0:
-                    action = random.choice(range(8))
+            # Random action exploration guided by positive reward
+            rewards = []
+            for i in range(self.action_options):
+                if i == 8:
+                    reward = self.compute_finish_reward(current_mask, ground_truth)
                 else:
-                    action = random.choice(positive_idx)
+                    reward = self.compute_reward(i, current_mask, ground_truth)
+                rewards.append(reward)
+                
+            positive_idx = np.where(np.array(rewards) > 0)[0]
+            
+            if len(positive_idx) == 0:
+                action = random.choice(range(self.action_options))
+            else:
+                action = random.choice(positive_idx)
         return action
 
     def compute_mask(self, action, current_mask):
-        image_rate = 0.1
-        delta_width = image_rate * (current_mask[2] - current_mask[0])
-        delta_height = image_rate * (current_mask[3] - current_mask[1])
+        delta_width = self.alpha * (current_mask[2] - current_mask[0])
+        delta_height = self.alpha * (current_mask[3] - current_mask[1])
         dx1, dy1, dx2, dy2 = 0, 0, 0, 0
 
         if action == 0:
@@ -122,8 +125,8 @@ class LocalizationAgent:
         return 1 if iou_new > iou_current else -1
 
     def compute_finish_reward(self, current_mask, ground_truth):
-        # +3 if terminated with IoU > 0.5, else -3
-        return 3 if self.compute_iou(current_mask, ground_truth) > 0.5 else -3
+        # +nu if terminated with IoU > threshold, else -nu
+        return self.nu if self.compute_iou(current_mask, ground_truth) > self.threshold else -self.nu
 
     def feature_extract(self, img, history, width, height, current_mask):
         """Converts mask to cropped image tensor and history list to tensor"""
