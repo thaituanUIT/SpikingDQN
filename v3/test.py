@@ -91,11 +91,12 @@ def main():
     parser.add_argument('--num-samples', type=int, default=10)
     parser.add_argument('--simulate', type=int, default=10)
     parser.add_argument('--logging', action='store_true', help="Log metrics to CSV")
+    parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
+    voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
     dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
     
     if args.method == 'jelly':

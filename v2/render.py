@@ -80,11 +80,12 @@ def main():
     parser.add_argument('--target', type=str, default='mixing')
     parser.add_argument('--num-images', type=int, default=5, help="Number of images to render")
     parser.add_argument('--simulate', type=int, default=10)
+    parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
+    voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
     dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_images)
     
     if args.method == 'surrogate':

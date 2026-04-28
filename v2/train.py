@@ -157,13 +157,14 @@ def main():
     parser.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
     parser.add_argument('--clip-grad', type=float, default=1.0, help="Gradient clipping norm")
     parser.add_argument('--logging', action='store_true', help="Enable logging")
+    parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
     
     # 1. Load Data
-    voc_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
+    voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'VOC2012')
     dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
     
     if len(dataset) == 0:
