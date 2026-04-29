@@ -44,13 +44,20 @@ def train_stdp_pretraining(model, dataset, device):
     model.set_pretrain_mode(False)
     print("--- STDP Pre-training Complete ---\n")
 
-def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10):
+def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="v3/weights/best_model.pth"):
     epsilon = epsilon_start
     epsilon_decay = (epsilon_start - epsilon_min) / decay_steps
     
     history_loss = []
     history_epsilon = []
     
+    best_loss = float('inf')
+    patience_counter = 0
+    
+    # Ensure weights directory exists if saving
+    if save_mode != "none":
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+
     for epoch in range(1, epochs + 1):
         print(f"\n--- Epoch {epoch}/{epochs} ---")
         epoch_loss = []
@@ -92,8 +99,23 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
         history_loss.append(avg_loss)
         history_epsilon.append(epsilon)
         
+        # Save best model
+        if save_mode == "best" and avg_loss < best_loss:
+            torch.save(agent.model.state_dict(), save_path)
+            print(f"New best model saved with Loss: {avg_loss:.4f}")
+
+        if avg_loss < best_loss:
+            best_loss = avg_loss
+            patience_counter = 0
+        else:
+            patience_counter += 1
+
         if epsilon > epsilon_min:
             epsilon -= epsilon_decay
+            
+        if early_stop_patience > 0 and patience_counter >= early_stop_patience:
+            print(f"Early stopping triggered at epoch {epoch}. No improvement in Avg Loss for {early_stop_patience} epochs.")
+            break
 
     return history_loss, history_epsilon
 
@@ -133,6 +155,8 @@ def main():
     parser.add_argument('--optimizer', type=str, choices=['adam', 'adamw', 'rmsprop', 'sgd'], default='adam', help="Optimizer to use")
     parser.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
     parser.add_argument('--clip-grad', type=float, default=1.0, help="Gradient clipping norm")
+    parser.add_argument('--early-stop', type=int, default=0, help="Early stopping if no improvement for N epochs")
+    parser.add_argument('--save', type=str, choices=["best", "last", "none"], default="none", help="Save model mode")
     parser.add_argument('--logging', action='store_true', help="Enable logging")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     args = parser.parse_args()
@@ -168,16 +192,26 @@ def main():
     
     # Train RL
     print(f"Starting RL Loop using SpikingJelly ({args.method})...")
-    losses, epsilons = run_rl_training(agent, dataset, epochs=args.epochs)
+    save_path = f"v3/weights/{args.method}_{args.target}.pth"
+    losses, epsilons = run_rl_training(
+        agent, dataset, epochs=args.epochs,
+        early_stop_patience=args.early_stop,
+        save_mode=args.save,
+        save_path=save_path
+    )
     
     if args.logging:
         plot_training_results(losses, epsilons, args.method, args.target)
     
     # Save Weights
-    os.makedirs('v3/weights', exist_ok=True)
-    save_path = f"v3/weights/{args.method}_{args.target}.pth"
-    torch.save(model.state_dict(), save_path)
-    print(f"Model saved to {save_path}")
+    if args.save == "last":
+        os.makedirs('v3/weights', exist_ok=True)
+        torch.save(model.state_dict(), save_path)
+        print(f"Final model saved to {save_path}")
+    elif args.save == "best":
+        print(f"Best model was saved to {save_path}")
+    else:
+        print("Model saving skipped (none).")
 
 if __name__ == '__main__':
     main()
