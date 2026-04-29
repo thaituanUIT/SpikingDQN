@@ -12,20 +12,20 @@ from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
 from models.stdp import SQNSTDP
 
-def get_optimizer(model, opt_name, lr):
+def get_optimizer(model, opt_name, lr, weight_decay=0.0):
     """Factory function to create the requested optimizer"""
     parameters = filter(lambda p: p.requires_grad, model.parameters())
     
     if opt_name == 'adam':
-        return optim.Adam(parameters, lr=lr)
+        return optim.Adam(parameters, lr=lr, weight_decay=weight_decay)
     elif opt_name == 'adamw':
-        return optim.AdamW(parameters, lr=lr, weight_decay=0.01)
+        return optim.AdamW(parameters, lr=lr, weight_decay=weight_decay if weight_decay > 0 else 0.01)
     elif opt_name == 'rmsprop':
-        return optim.RMSprop(parameters, lr=lr, alpha=0.99, eps=1e-8)
+        return optim.RMSprop(parameters, lr=lr, alpha=0.99, eps=1e-8, weight_decay=weight_decay)
     elif opt_name == 'sgd':
-        return optim.SGD(parameters, lr=lr, momentum=0.9)
+        return optim.SGD(parameters, lr=lr, momentum=0.9, weight_decay=weight_decay)
     elif opt_name == 'radam':
-        return optim.RAdam(parameters, lr=lr)
+        return optim.RAdam(parameters, lr=lr, weight_decay=weight_decay)
     else:
         raise ValueError(f"Unknown optimizer: {opt_name}")
 
@@ -53,7 +53,7 @@ def train_stdp_pretraining(model, dataset, device):
     model.set_pretrain_mode(False)
     print("--- STDP Pre-training Complete ---\n")
 
-def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10):
+def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0):
     """Standard DQN Training Loop"""
     epsilon = epsilon_start
     epsilon_decay = (epsilon_start - epsilon_min) / decay_steps
@@ -61,6 +61,9 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
     # Track logs
     history_loss = []
     history_epsilon = []
+    
+    best_loss = float('inf')
+    patience_counter = 0
     
     for epoch in range(1, epochs + 1):
         print(f"\n--- Epoch {epoch}/{epochs} ---")
@@ -105,6 +108,16 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
         
         if epsilon > epsilon_min:
             epsilon -= epsilon_decay
+            
+        if early_stop_patience > 0:
+            if avg_loss < best_loss:
+                best_loss = avg_loss
+                patience_counter = 0
+            else:
+                patience_counter += 1
+                if patience_counter >= early_stop_patience:
+                    print(f"Early stopping triggered at epoch {epoch}. No improvement in Avg Loss for {early_stop_patience} epochs.")
+                    break
 
     return history_loss, history_epsilon
 
@@ -155,7 +168,9 @@ def main():
     parser.add_argument('--epochs', type=int, default=10, help="Number of RL epochs")
     parser.add_argument('--optimizer', type=str, choices=['adam', 'adamw', 'rmsprop', 'sgd', 'radam'], default='adam', help="Optimizer to use")
     parser.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
+    parser.add_argument('--weight-decay', type=float, default=0.0, help="Weight decay for optimizer")
     parser.add_argument('--clip-grad', type=float, default=1.0, help="Gradient clipping norm")
+    parser.add_argument('--early-stop', type=int, default=0, help="Early stopping if no improvement for N epochs")
     parser.add_argument('--logging', action='store_true', help="Enable logging")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     args = parser.parse_args()
@@ -182,20 +197,20 @@ def main():
         model = SQNSTDP()
         
     model = model.to(device)
-    optimizer = get_optimizer(model, args.optimizer, args.lr)
+    optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
     
     # 3. Handle STDP Specifics
     if args.method == 'stdp':
         train_stdp_pretraining(model, dataset, device)
         # Re-initialize optimizer because STDP freezes some layers and we only want RL head to train
-        optimizer = get_optimizer(model, args.optimizer, args.lr)
+        optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
 
     # 4. Initialize Agent
     agent = LocalizationAgent(model=model, optimizer=optimizer, device=device, clip_grad=args.clip_grad)
     
     # 5. Train RL
     print(f"Starting RL Loop using {args.method} mechanism...")
-    losses, epsilons = run_rl_training(agent, dataset, epochs=args.epochs)
+    losses, epsilons = run_rl_training(agent, dataset, epochs=args.epochs, early_stop_patience=args.early_stop)
     
     if args.logging:
         plot_training_results(losses, epsilons, args.method, args.target)
