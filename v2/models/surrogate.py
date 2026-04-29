@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
-from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionResNetBackbone
+from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone
 
 class SuperSpike(torch.autograd.Function):
     """
@@ -46,7 +46,7 @@ class SQNSurrogate(nn.Module):
         elif self.backbone_name == 'resnet18':
             self.backbone = ResNetBackbone(model_name='resnet18')
         elif self.backbone_name == 'fusion':
-            self.backbone = FusionResNetBackbone(model_name='resnet18')
+            self.backbone = FusionBackbone(model_name='resnet18')
         else:
             self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
             
