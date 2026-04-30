@@ -99,9 +99,11 @@ def main():
     parser.add_argument('--target', type=str, default='mixing')
     parser.add_argument('--num-samples', type=int, default=10) # Test on 10 samples by default
     parser.add_argument('--simulate', type=int, default=10)
-    parser.add_argument('--logging', action='store_true', help="Log metrics to CSV")
-    parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
+    parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
+    parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
     parser.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
+    parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
+    parser.add_argument('--logging', action='store_true', help="Log metrics to CSV")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -109,15 +111,16 @@ def main():
     voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dataset')
     dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
     
+    history_dim = 9 * args.replay
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone)
+        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone)
+        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
         model.is_snn = True # Set to SNN mode for evaluation
     elif args.method == 'stdp':
         if args.backbone == 'vgg16':
             raise ValueError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
-        model = SQNSTDP()
+        model = SQNSTDP(history_dim=history_dim)
         model.set_pretrain_mode(False) # Ensure RL head is active
         
     model = model.to(device)
@@ -134,7 +137,7 @@ def main():
         print(f"Warning: Weights not found at {weight_path}. Evaluating with random weights.")
         
     # Agent wrapper (optimizer not needed for eval)
-    agent = LocalizationAgent(model=model, device=device)
+    agent = LocalizationAgent(model=model, device=device, history_size=args.replay, max_steps=args.max_steps)
     
     csv_file = f"test_{args.method}_{args.target}_{args.backbone}.csv"
     test_model(agent, dataset, logging=args.logging, output_file=csv_file)

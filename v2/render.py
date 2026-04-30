@@ -101,10 +101,16 @@ def main():
     parser.add_argument('--target', type=str, default='mixing')
     parser.add_argument('--num-images', type=int, default=5, help="Number of images to render")
     parser.add_argument('--simulate', type=int, default=10)
-    parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
+    parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
+    parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
     parser.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
+    parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
+    parser.add_argument('--save', action='store_true', help="Save rendered images to disk")
     parser.add_argument('--save-dir', type=str, default=None, help="Directory to save rendered images")
     args = parser.parse_args()
+
+    if args.save and not args.save_dir:
+        args.save_dir = f"renders/{args.method}_{args.target}"
 
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -112,15 +118,16 @@ def main():
     voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dataset')
     dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_images)
     
+    history_dim = 9 * args.replay
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone)
+        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone)
+        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
         model.is_snn = True
     elif args.method == 'stdp':
         if args.backbone == 'vgg16':
             raise ValueError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
-        model = SQNSTDP()
+        model = SQNSTDP(history_dim=history_dim)
         model.set_pretrain_mode(False)
         
     model = model.to(device)
@@ -134,7 +141,7 @@ def main():
         print(f"{status}: Weights not found at {weight_path}. Cannot render without trained weights.")
         return
         
-    agent = LocalizationAgent(model=model, device=device)
+    agent = LocalizationAgent(model=model, device=device, history_size=args.replay, max_steps=args.max_steps)
     render_predictions(agent, dataset, num_images=args.num_images, save_dir=args.save_dir)
 
 
