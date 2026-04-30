@@ -110,10 +110,14 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
         history_loss.append(avg_loss)
         history_epsilon.append(epsilon)
         
-        # Save best model
+        # Save model based on mode
         if save_mode == "best" and avg_loss < best_loss:
             torch.save(agent.model.state_dict(), save_path)
             print(f"New best model saved with Loss: {avg_loss:.4f}")
+        elif save_mode == "epoch":
+            epoch_save_path = save_path.replace(".pth", f"_epoch_{epoch}.pth")
+            torch.save(agent.model.state_dict(), epoch_save_path)
+            print(f"Model saved for epoch {epoch} to {epoch_save_path}")
 
         if avg_loss < best_loss:
             best_loss = avg_loss
@@ -181,7 +185,7 @@ def main():
     parser.add_argument('--clip-grad', type=float, default=1.0, help="Gradient clipping norm")
     parser.add_argument('--early-stop', type=int, default=0, help="Early stopping if no improvement for N epochs")
     parser.add_argument('--logging', action='store_true', help="Enable logging")
-    parser.add_argument('--save', type=str, choices = ["best", "last", "none"], default="none", help="Save model")
+    parser.add_argument('--save', type=str, choices = ["best", "last", "epoch", "none"], default="last", help="Save model mode")
     parser.add_argument('--loss-fn', type=str, choices=['mse', 'huber', 'smooth_l1'], default='huber', help="Loss function for RL")
     parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
     parser.add_argument('--alpha', type=float, default=0.1, help="Mask transformation rate")
@@ -258,6 +262,8 @@ def main():
         print(f"Final model saved to {save_path}")
     elif args.save == "best":
         print(f"Best model was saved to {save_path}")
+    elif args.save == "epoch":
+        print(f"Epoch models were saved in weights directory.")
     else:
         print("Model saving skipped (none).")
 
