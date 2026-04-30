@@ -81,6 +81,7 @@ def main():
     parser.add_argument('--num-images', type=int, default=5, help="Number of images to render")
     parser.add_argument('--simulate', type=int, default=10)
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
+    parser.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -101,12 +102,13 @@ def main():
         
     model = model.to(device)
     
-    weight_path = f"weights/{args.method}_{args.target}.pth"
+    weight_path = args.weights if args.weights else f"weights/{args.method}_{args.target}.pth"
     if os.path.exists(weight_path):
         model.load_state_dict(torch.load(weight_path, map_location=device))
         print(f"Loaded weights from {weight_path}")
     else:
-        print(f"Error: Weights not found at {weight_path}. Cannot render without trained weights.")
+        status = "Error" if args.weights else "Warning"
+        print(f"{status}: Weights not found at {weight_path}. Cannot render without trained weights.")
         return
         
     agent = LocalizationAgent(model=model, device=device)

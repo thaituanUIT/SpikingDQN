@@ -101,6 +101,7 @@ def main():
     parser.add_argument('--simulate', type=int, default=10)
     parser.add_argument('--logging', action='store_true', help="Log metrics to CSV")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
+    parser.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -122,10 +123,13 @@ def main():
     model = model.to(device)
     
     # Load weights
-    weight_path = f"weights/{args.method}_{args.target}.pth"
+    weight_path = args.weights if args.weights else f"weights/{args.method}_{args.target}.pth"
     if os.path.exists(weight_path):
         model.load_state_dict(torch.load(weight_path, map_location=device))
         print(f"Loaded weights from {weight_path}")
+    elif args.weights:
+        print(f"Error: Specified weights not found at {weight_path}")
+        return
     else:
         print(f"Warning: Weights not found at {weight_path}. Evaluating with random weights.")
         
