@@ -21,7 +21,7 @@ class ReplayBuffer:
         return len(self.buffer)
 
 class LocalizationAgent:
-    def __init__(self, model, optimizer=None, device='cpu', 
+    def __init__(self, model, optimizer=None, loss_fn='huber', device='cpu', 
                  gamma=0.9, max_steps=20, action_options=9, history_size=10,
                  clip_grad=1.0, alpha=0.1, nu=3.0, threshold=0.5):
         self.model = model.to(device)
@@ -34,9 +34,16 @@ class LocalizationAgent:
         self.history_size = history_size
         
         self.memory = ReplayBuffer(capacity=1000)
-        self.loss_fn = nn.HuberLoss()
-        self.clip_grad = clip_grad
         
+        # Loss function selection
+        if loss_fn == 'mse':
+            self.loss_fn = nn.MSELoss()
+        elif loss_fn == 'smooth_l1':
+            self.loss_fn = nn.SmoothL1Loss()
+        else:
+            self.loss_fn = nn.HuberLoss()
+            
+        self.clip_grad = clip_grad
         self.alpha = alpha
         self.nu = nu
         self.threshold = threshold

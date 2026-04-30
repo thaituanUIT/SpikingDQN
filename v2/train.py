@@ -182,7 +182,12 @@ def main():
     parser.add_argument('--early-stop', type=int, default=0, help="Early stopping if no improvement for N epochs")
     parser.add_argument('--logging', action='store_true', help="Enable logging")
     parser.add_argument('--save', type=str, choices = ["best", "last", "none"], default="none", help="Save model")
+    parser.add_argument('--loss-fn', type=str, choices=['mse', 'huber', 'smooth_l1'], default='huber', help="Loss function for RL")
+    parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
+    parser.add_argument('--alpha', type=float, default=0.1, help="Mask transformation rate")
+    parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
+    
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -197,14 +202,15 @@ def main():
         return
 
     # 2. Initialize Model
+    history_dim = 9 * args.replay
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone)
+        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone)
+        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
     elif args.method == 'stdp':
         if args.backbone == 'vgg16':
             raise NotImplementedError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
-        model = SQNSTDP()
+        model = SQNSTDP(history_dim=history_dim)
         
     model = model.to(device)
     optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
@@ -216,7 +222,16 @@ def main():
         optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
 
     # 4. Initialize Agent
-    agent = LocalizationAgent(model=model, optimizer=optimizer, device=device, clip_grad=args.clip_grad)
+    agent = LocalizationAgent(
+        model=model, 
+        optimizer=optimizer, 
+        device=device, 
+        clip_grad=args.clip_grad,
+        loss_fn=args.loss_fn,
+        max_steps=args.max_steps,
+        alpha=args.alpha,
+        history_size=args.replay
+    )
     
     # 5. Train RL
     print(f"Starting RL Loop using {args.method} mechanism...")
