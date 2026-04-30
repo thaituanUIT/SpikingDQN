@@ -10,9 +10,20 @@ from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
 from models.stdp import SQNSTDP
 
-def render_predictions(agent, dataset, num_images=5):
+try:
+    from google.colab.patches import cv2_imshow
+    IN_COLAB = True
+except ImportError:
+    IN_COLAB = False
+
+
+def render_predictions(agent, dataset, num_images=5, save_dir=None):
     print(f"\n--- Rendering Visualizations for {num_images} samples ---")
     
+    if save_dir:
+        os.makedirs(save_dir, exist_ok=True)
+        print(f"Rendered images will be saved to {save_dir}")
+
     for idx in range(min(num_images, len(dataset))):
         sample = dataset[idx]
         image = sample['image']
@@ -65,12 +76,22 @@ def render_predictions(agent, dataset, num_images=5):
         cv2.rectangle(vis_img, (int(final_mask[0]), int(final_mask[1])), 
                       (int(final_mask[2]), int(final_mask[3])), (0, 0, 255), 2)
                       
+        if save_dir:
+            save_path = os.path.join(save_dir, f"sample_{idx+1}.png")
+            cv2.imwrite(save_path, vis_img)
+            print(f"Saved visualization to {save_path}")
+
         print(f"Sample {idx+1}: Displaying result...")
-        cv2.imshow(f"Visualization - Sample {idx+1}", vis_img)
-        print("Press any key to see the next image...")
-        cv2.waitKey(0)
+        
+        if IN_COLAB:
+            cv2_imshow(vis_img)
+        else:
+            cv2.imshow(f"Visualization - Sample {idx+1}", vis_img)
+            print("Press any key to see the next image...")
+            cv2.waitKey(0)
             
-    cv2.destroyAllWindows()
+    if not IN_COLAB:
+        cv2.destroyAllWindows()
     print("--- Visualization Complete ---")
 
 def main():
@@ -82,7 +103,9 @@ def main():
     parser.add_argument('--simulate', type=int, default=10)
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     parser.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
+    parser.add_argument('--save-dir', type=str, default=None, help="Directory to save rendered images")
     args = parser.parse_args()
+
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
@@ -112,7 +135,9 @@ def main():
         return
         
     agent = LocalizationAgent(model=model, device=device)
-    render_predictions(agent, dataset, num_images=args.num_images)
+    render_predictions(agent, dataset, num_images=args.num_images, save_dir=args.save_dir)
+
+
 
 if __name__ == '__main__':
     main()
