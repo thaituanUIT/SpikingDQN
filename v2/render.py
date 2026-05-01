@@ -13,17 +13,16 @@ from models.stdp import SQNSTDP
 import matplotlib.pyplot as plt
 
 
-def render_predictions(agent, dataset, num_images=5, save_dir=None):
-    print(f"\n--- Rendering Visualizations for {num_images} samples ---")
+def render_predictions(agent, samples, save_dir=None):
+    print(f"\n--- Rendering Visualizations for {len(samples)} samples ---")
     
     if save_dir:
         os.makedirs(save_dir, exist_ok=True)
         print(f"Rendered images will be saved to {save_dir}")
 
-    for idx in range(min(num_images, len(dataset))):
-        sample = dataset[idx]
+    for idx, sample in enumerate(samples):
         image = sample['image']
-        ground_truth = sample['box']
+        ground_truth = sample.get('box')
         
         history = [-1] * agent.history_size
         height, width, _ = image.shape
@@ -59,9 +58,10 @@ def render_predictions(agent, dataset, num_images=5, save_dir=None):
         # Visualization
         vis_img = image.copy()
         
-        # Draw ground truth (Green)
-        cv2.rectangle(vis_img, (int(ground_truth[0]), int(ground_truth[1])), 
-                      (int(ground_truth[2]), int(ground_truth[3])), (0, 255, 0), 2)
+        # Draw ground truth (Green) - only if available
+        if ground_truth is not None and np.any(ground_truth > 0):
+            cv2.rectangle(vis_img, (int(ground_truth[0]), int(ground_truth[1])), 
+                          (int(ground_truth[2]), int(ground_truth[3])), (0, 255, 0), 2)
         
         # Draw intermediate predictions (Blue, thin)
         for m in masks[:-1]:
@@ -78,7 +78,8 @@ def render_predictions(agent, dataset, num_images=5, save_dir=None):
             cv2.imwrite(save_path, cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR))
             print(f"Saved visualization to {save_path}")
 
-        print(f"Sample {idx+1}: Displaying result...")
+        filename = sample.get('filename', f"sample_{idx+1}")
+        print(f"Sample {idx+1} ({filename}): Displaying result...")
         plt.figure(figsize=(8, 6))
         plt.imshow(vis_img)
         plt.title(f"Sample {idx+1} - Prediction")
@@ -91,7 +92,8 @@ def main():
     parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
     parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv')
     parser.add_argument('--target', type=str, default='mixing')
-    parser.add_argument('--num-images', type=int, default=5, help="Number of images to render")
+    parser.add_argument('--image-path', type=str, default=None, help="Path to specific image file")
+    parser.add_argument('--num-images', type=int, default=5, help="Number of images if no path provided")
     parser.add_argument('--simulate', type=int, default=10)
     parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
     parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
@@ -107,8 +109,21 @@ def main():
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dataset')
-    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_images)
+    if args.image_path:
+        if not os.path.exists(args.image_path):
+            print(f"Error: Image path {args.image_path} not found.")
+            return
+        img_bgr = cv2.imread(args.image_path)
+        img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+        samples = [{
+            'image': img_rgb,
+            'box': None,
+            'filename': os.path.basename(args.image_path)
+        }]
+    else:
+        voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dataset')
+        dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_images)
+        samples = [dataset[i] for i in range(len(dataset))]
     
     history_dim = 9 * args.replay
     if args.method == 'surrogate':
@@ -134,7 +149,7 @@ def main():
         return
         
     agent = LocalizationAgent(model=model, device=device, history_size=args.replay, max_steps=args.max_steps)
-    render_predictions(agent, dataset, num_images=args.num_images, save_dir=args.save_dir)
+    render_predictions(agent, samples, save_dir=args.save_dir)
 
 
 
