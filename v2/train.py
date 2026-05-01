@@ -53,7 +53,7 @@ def train_stdp_pretraining(model, dataset, device):
     model.set_pretrain_mode(False)
     print("--- STDP Pre-training Complete ---\n")
 
-def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth"):
+def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20):
     """Standard DQN Training Loop"""
     epsilon = epsilon_start
     epsilon_decay = (epsilon_start - epsilon_min) / decay_steps
@@ -92,7 +92,7 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
                     image, history, current_mask, ground_truth, step, epsilon
                 )
                 
-                loss = agent.train_step(batch_size=20)
+                loss = agent.train_step(batch_size=batch_size)
                 if loss > 0:
                     epoch_loss.append(loss)
                     
@@ -178,6 +178,7 @@ def main():
     parser.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
     parser.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
     parser.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
+    parser.add_argument('--gamma', type=float, default=0.99, help="Discount factor for future rewards")
     parser.add_argument('--epochs', type=int, default=10, help="Number of RL epochs")
     parser.add_argument('--optimizer', type=str, choices=['adam', 'adamw', 'rmsprop', 'sgd', 'radam'], default='adam', help="Optimizer to use")
     parser.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
@@ -189,6 +190,9 @@ def main():
     parser.add_argument('--loss-fn', type=str, choices=['mse', 'huber', 'smooth_l1'], default='huber', help="Loss function for RL")
     parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
     parser.add_argument('--alpha', type=float, default=0.1, help="Mask transformation rate")
+    parser.add_argument('--nu', type=float, default=3.0, help="Trigger reward weight")
+    parser.add_argument('--threshold', type=float, default=0.5, help="IoU threshold for trigger reward")
+    parser.add_argument('--batch-size', type=int, default=20, help="Batch size for training")
     parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     
@@ -230,6 +234,9 @@ def main():
         model=model, 
         optimizer=optimizer, 
         device=device, 
+        gamma=args.gamma,
+        nu=args.nu,
+        threshold=args.threshold,
         clip_grad=args.clip_grad,
         loss_fn=args.loss_fn,
         max_steps=args.max_steps,
@@ -244,7 +251,8 @@ def main():
         agent, dataset, epochs=args.epochs, 
         early_stop_patience=args.early_stop,
         save_mode=args.save,
-        save_path=save_path
+        save_path=save_path,
+        batch_size=args.batch_size
     )
     
     if args.logging:
