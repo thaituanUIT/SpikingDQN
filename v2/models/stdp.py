@@ -69,6 +69,7 @@ class STDPConv2d(nn.Module):
         # Transform latencies (smaller is better) to firing rates/potentials (larger is better).
         # We assume simulation max time is 15.
         T_max = 15.0
+        # A spike is valid if its latency is > 0.
         active_mask = (spike_latencies > 0).float()
         potentials_in = (T_max - spike_latencies) * active_mask 
         
@@ -121,8 +122,9 @@ class STDPConv2d(nn.Module):
                     self.weight.clamp_(0.01, 1.0) # Avoid absolute zero to allow recovery
                     self.normalize_weights()
                 
-        # Return out latencies (we approximate latency based on potential)
-        out_latencies = (T_max - max_potentials) * out_spikes
+        # Return out latencies (bounded mapping: higher potential -> earlier spike)
+        # We map potential [threshold, inf) to latency (0, T_max]
+        out_latencies = (T_max * self.threshold / (max_potentials + 1e-5)) * out_spikes
         return out_latencies
 
 class SQNSTDP(nn.Module):
@@ -178,7 +180,8 @@ class SQNSTDP(nn.Module):
         with torch.no_grad():
             x = self.dog(x)
             # intensity to latency (simplification): higher intensity -> lower latency
-            latencies = (1.0 - x) * 15.0 
+            # Map intensity [0, 1] to latency [0.1, 15.0]
+            latencies = (1.0 - x) * 14.9 + 0.1 
             
             x = self.conv1(latencies)
             x = self.pool(x)
@@ -194,11 +197,11 @@ class SQNSTDP(nn.Module):
             x = self.dog(state)
             
             # Simple Intensity-to-Latency Encoding (T_max = 15)
-            # Normalize to [0, 1] then invert
+            # Normalize to [0, 1] then invert. Map to [0.1, 15.0] to ensure visibility to masks.
             x_min = x.min(dim=-1, keepdim=True)[0].min(dim=-2, keepdim=True)[0]
             x_max = x.max(dim=-1, keepdim=True)[0].max(dim=-2, keepdim=True)[0]
             x_norm = (x - x_min) / (x_max - x_min + 1e-5)
-            latencies = (1.0 - x_norm) * 15.0
+            latencies = (1.0 - x_norm) * 14.9 + 0.1
             
             # 2. STDP Convolutional Layers
             c1 = self.conv1(latencies, is_training_stdp=self.is_pretraining)
