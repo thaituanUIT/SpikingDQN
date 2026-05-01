@@ -10,11 +10,7 @@ from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
 from models.stdp import SQNSTDP
 
-try:
-    from google.colab.patches import cv2_imshow
-    IN_COLAB = True
-except ImportError:
-    IN_COLAB = False
+import matplotlib.pyplot as plt
 
 
 def render_predictions(agent, dataset, num_images=5, save_dir=None):
@@ -61,7 +57,7 @@ def render_predictions(agent, dataset, num_images=5, save_dir=None):
         final_mask = current_mask
         
         # Visualization
-        vis_img = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        vis_img = image.copy()
         
         # Draw ground truth (Green)
         cv2.rectangle(vis_img, (int(ground_truth[0]), int(ground_truth[1])), 
@@ -70,28 +66,24 @@ def render_predictions(agent, dataset, num_images=5, save_dir=None):
         # Draw intermediate predictions (Blue, thin)
         for m in masks[:-1]:
              cv2.rectangle(vis_img, (int(m[0]), int(m[1])), 
-                      (int(m[2]), int(m[3])), (255, 0, 0), 1)
+                      (int(m[2]), int(m[3])), (0, 0, 255), 1)
 
         # Draw final prediction (Red)
         cv2.rectangle(vis_img, (int(final_mask[0]), int(final_mask[1])), 
-                      (int(final_mask[2]), int(final_mask[3])), (0, 0, 255), 2)
+                      (int(final_mask[2]), int(final_mask[3])), (255, 0, 0), 2)
                       
         if save_dir:
             save_path = os.path.join(save_dir, f"sample_{idx+1}.png")
-            cv2.imwrite(save_path, vis_img)
+            # Save as BGR for cv2
+            cv2.imwrite(save_path, cv2.cvtColor(vis_img, cv2.COLOR_RGB2BGR))
             print(f"Saved visualization to {save_path}")
 
         print(f"Sample {idx+1}: Displaying result...")
-        
-        if IN_COLAB:
-            cv2_imshow(vis_img)
-        else:
-            cv2.imshow(f"Visualization - Sample {idx+1}", vis_img)
-            print("Press any key to see the next image...")
-            cv2.waitKey(0)
-            
-    if not IN_COLAB:
-        cv2.destroyAllWindows()
+        plt.figure(figsize=(8, 6))
+        plt.imshow(vis_img)
+        plt.title(f"Sample {idx+1} - Prediction")
+        plt.axis('off')
+        plt.show()
     print("--- Visualization Complete ---")
 
 def main():
