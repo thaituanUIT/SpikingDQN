@@ -38,12 +38,21 @@ class STDPConv2d(nn.Module):
         self.kernel_size = kernel_size
         self.threshold = threshold
         
-        # Weights initialized randomly [0.5, 1.0]
-        self.weight = nn.Parameter(torch.rand(out_channels, in_channels, kernel_size, kernel_size) * 0.5 + 0.5)
+        # Weights initialized randomly [0.2, 0.8] and normalized
+        self.weight = nn.Parameter(torch.rand(out_channels, in_channels, kernel_size, kernel_size) * 0.6 + 0.2)
+        self.normalize_weights()
         
         # STDP parameters
         self.lr_plus = 0.005 # Learning rate for depression/potentiation
         self.lr_minus = 0.0015
+        
+    def normalize_weights(self):
+        """Keep sum of weights per neuron constant to prevent saturation"""
+        with torch.no_grad():
+            norm = self.weight.sum(dim=(1, 2, 3), keepdim=True)
+            self.weight.data /= (norm + 1e-5)
+            # Scaling factor to maintain reasonable potential levels
+            self.weight.data *= (self.in_channels * self.kernel_size**2) * 0.5
 
     def forward(self, spike_latencies, is_training_stdp=False):
         """
@@ -109,7 +118,8 @@ class STDPConv2d(nn.Module):
                     total_delta_w.index_add_(0, valid_winners, delta_w)
                     
                     self.weight += total_delta_w
-                    self.weight.clamp_(0.0, 1.0)
+                    self.weight.clamp_(0.01, 1.0) # Avoid absolute zero to allow recovery
+                    self.normalize_weights()
                 
         # Return out latencies (we approximate latency based on potential)
         out_latencies = (T_max - max_potentials) * out_spikes
@@ -128,10 +138,10 @@ class SQNSTDP(nn.Module):
         
         # Unsupervised STDP Backbone
         self.pool = nn.MaxPool2d(2, 2)
-        # Using stride > 1 in STDP is manually handled or pooling is used. We use maxpool.
-        self.conv1 = STDPConv2d(3, 32, kernel_size=5, threshold=5.0)
-        self.conv2 = STDPConv2d(32, 64, kernel_size=3, threshold=5.0)
-        self.conv3 = STDPConv2d(64, 64, kernel_size=3, threshold=5.0)
+        # Increased thresholds significantly to ensure sparse, meaningful firing
+        self.conv1 = STDPConv2d(3, 32, kernel_size=5, threshold=150.0)
+        self.conv2 = STDPConv2d(32, 64, kernel_size=3, threshold=100.0)
+        self.conv3 = STDPConv2d(64, 64, kernel_size=3, threshold=100.0)
         
         self.is_pretraining = False # Flag for STDP Phase vs RL Phase
         
