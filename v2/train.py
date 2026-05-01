@@ -29,28 +29,96 @@ def get_optimizer(model, opt_name, lr, weight_decay=0.0):
     else:
         raise ValueError(f"Unknown optimizer: {opt_name}")
 
-def train_stdp_pretraining(model, dataset, device):
-    """Unsupervised STDP Pre-training phase for the Backbone"""
-    print("\n--- Starting Unsupervised STDP Pre-training ---")
+def train_stdp_pretraining(model, dataset, device, stdp_epochs=3, lr_decay=0.5):
+    """
+    Unsupervised STDP Pre-training phase for the Backbone.
+    Runs multiple epochs with decaying STDP learning rates to allow
+    the convolutional filters to converge to stable feature detectors.
+    After pretraining, validates that the backbone produces meaningful features.
+    """
+    print(f"\n--- Starting Unsupervised STDP Pre-training ({stdp_epochs} epochs) ---")
     model.set_pretrain_mode(True)
     
-    # Simple pass over all images
-    for idx in range(len(dataset)):
-        sample = dataset[idx]
-        img = sample['image']
+    # Store original LRs so we can decay them
+    stdp_layers = [model.conv1, model.conv2, model.conv3]
+    original_lrs = [(l.lr_plus, l.lr_minus) for l in stdp_layers]
+    
+    for ep in range(1, stdp_epochs + 1):
+        # Decay LR each epoch
+        decay_factor = lr_decay ** (ep - 1)
+        for layer, (lr_p, lr_m) in zip(stdp_layers, original_lrs):
+            layer.lr_plus = lr_p * decay_factor
+            layer.lr_minus = lr_m * decay_factor
         
-        # Format image for STDP
-        img_transposed = np.transpose(img, (2, 0, 1))
-        # Add batch dim
-        img_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(device) / 255.0
+        print(f"STDP Epoch {ep}/{stdp_epochs} (LR decay factor: {decay_factor:.3f})")
         
-        # Forward pass triggers STDP weight updates internally
-        model(img_tensor, None)
-        
-        if (idx + 1) % 10 == 0:
-            print(f"Pre-training progress: {idx + 1}/{len(dataset)} images")
+        for idx in range(len(dataset)):
+            sample = dataset[idx]
+            img = sample['image']
             
-    model.set_pretrain_mode(False)
+            # Format image for STDP
+            img_transposed = np.transpose(img, (2, 0, 1))
+            img_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(device) / 255.0
+            
+            # Forward pass triggers STDP weight updates internally
+            model(img_tensor, None)
+            
+            if (idx + 1) % 10 == 0:
+                stats = model.get_backbone_stats()
+                conv1_fr = stats['conv1']['firing_rate_mean']
+                conv2_fr = stats['conv2']['firing_rate_mean']
+                conv3_fr = stats['conv3']['firing_rate_mean']
+                print(f"[{idx+1}/{len(dataset)}] Firing rates: "
+                      f"C1={conv1_fr:.4f} C2={conv2_fr:.4f} C3={conv3_fr:.4f} | "
+                      f"Thresh: C1={stats['conv1']['threshold_mean']:.1f} "
+                      f"C2={stats['conv2']['threshold_mean']:.1f} "
+                      f"C3={stats['conv3']['threshold_mean']:.1f}")
+    
+    # --- Feature Validation Checkpoint ---
+    print("\n  Validating backbone features...")
+    model.set_pretrain_mode(False)  # Temporarily disable STDP for clean forward
+    
+    with torch.no_grad():
+        # Run a few images through and check feature statistics
+        feature_stats = []
+        num_check = min(5, len(dataset))
+        for idx in range(num_check):
+            sample = dataset[idx]
+            img = sample['image']
+            img_transposed = np.transpose(img, (2, 0, 1))
+            img_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(device) / 255.0
+            
+            # Get features from backbone
+            x = model.dog(img_tensor)
+            latencies = model._encode_latencies(x)
+            c1 = model.conv1(latencies)
+            c1 = model.pool(c1)
+            c2 = model.conv2(c1)
+            c2 = model.pool(c2)
+            c3 = model.conv3(c2)
+            c3 = model.pool(c3)
+            
+            flat = c3.reshape(1, -1)
+            nonzero_frac = (flat != 0).float().mean().item()
+            feat_std = flat.std().item()
+            feat_mean = flat.mean().item()
+            feature_stats.append((nonzero_frac, feat_std, feat_mean))
+        
+        avg_nz = np.mean([s[0] for s in feature_stats])
+        avg_std = np.mean([s[1] for s in feature_stats])
+        avg_mean = np.mean([s[2] for s in feature_stats])
+        
+        print(f"\nFeature stats (avg over {num_check} images):")
+        print(f"Non-zero fraction: {avg_nz:.4f} | Std: {avg_std:.4f} | Mean: {avg_mean:.4f}")
+    
+    # Final backbone stats
+    final_stats = model.get_backbone_stats()
+    print("\nFinal backbone diagnostics:")
+    for name, s in final_stats.items():
+        print(f"{name}: thresh={s['threshold_mean']:.2f}±{s['threshold_std']:.2f}, "
+              f"fire_rate={s['firing_rate_mean']:.4f}±{s['firing_rate_std']:.4f}, "
+              f"w_mean={s['weight_mean']:.4f}, w_std={s['weight_std']:.4f}")
+    
     print("--- STDP Pre-training Complete ---\n")
 
 def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20):
@@ -194,6 +262,7 @@ def main():
     parser.add_argument('--threshold', type=float, default=0.5, help="IoU threshold for trigger reward")
     parser.add_argument('--batch-size', type=int, default=20, help="Batch size for training")
     parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
+    parser.add_argument('--stdp-epochs', type=int, default=3, help="Number of STDP pretraining epochs")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     
     args = parser.parse_args()
@@ -225,7 +294,7 @@ def main():
     
     # 3. Handle STDP Specifics
     if args.method == 'stdp':
-        train_stdp_pretraining(model, dataset, device)
+        train_stdp_pretraining(model, dataset, device, stdp_epochs=args.stdp_epochs)
         # Re-initialize optimizer because STDP freezes some layers and we only want RL head to train
         optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
 
