@@ -86,10 +86,12 @@ def test_model(agent, dataset, logging=False, output_file='test_results.csv'):
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Testing (v3 - SpikingJelly)")
     parser.add_argument('--method', type=str, default='jelly', choices=['jelly', 'stdp_jelly'])
-    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv')
+    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18', 'fusion'], default='conv')
     parser.add_argument('--target', type=str, default='mixing')
     parser.add_argument('--num-samples', type=int, default=10)
     parser.add_argument('--simulate', type=int, default=10)
+    parser.add_argument('--replay', type=int, default=10, help="History size")
+    parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
     parser.add_argument('--logging', action='store_true', help="Log metrics to CSV")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     parser.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
@@ -98,12 +100,13 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dataset')
-    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
+    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples, split="val")
     
+    history_dim = 9 * args.replay
     if args.method == 'jelly':
-        model = SQNJelly(simulation_time=args.simulate, backbone_name=args.backbone)
+        model = SQNJelly(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
     elif args.method == 'stdp_jelly':
-        model = SQNSTDPJelly(simulation_time=args.simulate)
+        model = SQNSTDPJelly(simulation_time=args.simulate, history_dim=history_dim)
     model = model.to(device)
     
     weight_path = args.weights if args.weights else f"v3/weights/{args.method}_{args.target}.pth"
@@ -116,7 +119,7 @@ def main():
     else:
         print(f"Warning: Weights not found at {weight_path}. Evaluating with random weights.")
         
-    agent = LocalizationAgent(model=model, device=device)
+    agent = LocalizationAgent(model=model, device=device, history_size=args.replay, max_steps=args.max_steps)
     
     csv_file = f"test_{args.method}_{args.target}_{args.backbone}.csv"
     test_model(agent, dataset, logging=args.logging, output_file=csv_file)

@@ -3,7 +3,7 @@ import torch.nn as nn
 from spikingjelly.activation_based import neuron, functional, surrogate, layer
 
 # Import from v3 to ensure we use the correct version of the backbone
-from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone
+from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone
 
 class SQNJelly(nn.Module):
     """
@@ -25,6 +25,8 @@ class SQNJelly(nn.Module):
             self.backbone = VGG16Backbone()
         elif self.backbone_name == 'resnet18':
             self.backbone = ResNetBackbone(model_name='resnet18')
+        elif self.backbone_name == 'fusion':
+            self.backbone = FusionBackbone(model_name='resnet18')
         else:
             self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
             
