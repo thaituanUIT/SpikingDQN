@@ -21,7 +21,7 @@ class ReplayBuffer:
         return len(self.buffer)
 
 class LocalizationAgent:
-    def __init__(self, model, optimizer=None, loss_fn='huber', device='cpu', 
+    def __init__(self, model, engine=None, optimizer=None, loss_fn='huber', device='cpu', 
                  gamma=0.9, max_steps=20, action_options=9, history_size=10,
                  clip_grad=1.0, alpha=0.1, nu=3.0, threshold=0.5):
         self.model = model.to(device)
@@ -47,7 +47,19 @@ class LocalizationAgent:
         self.alpha = alpha
         self.nu = nu
         self.threshold = threshold
-        
+
+        # Initialize default DQNEngine if none provided
+        if engine is None:
+            from backbone.engine import DQNEngine
+            self.engine = DQNEngine(self.model, gamma=self.gamma, use_target_net=False)
+        else:
+            self.engine = engine
+            self.engine.gamma = self.gamma
+            
+    def update_target_network(self):
+        """Delegates target network update to the engine."""
+        self.engine.update_target()
+
     def get_action(self, image_tensor, history_tensor, epsilon, current_mask, ground_truth):
         """
         Selects action using epsilon-greedy policy. 
@@ -193,25 +205,15 @@ class LocalizationAgent:
         img_next = torch.FloatTensor(np.stack([s['image'] for s in next_states])).to(self.device)
         hist_next = torch.FloatTensor(np.stack([s['history'] for s in next_states])).to(self.device)
         
+        actions = torch.LongTensor(actions).to(self.device)
         rewards = torch.FloatTensor(rewards).to(self.device)
         dones = torch.FloatTensor(dones).to(self.device)
         
         self.optimizer.zero_grad()
         
-        # Current Q-Values
-        q_vals = self.model(img_states, hist_states)
-        q_acts = q_vals.gather(1, torch.LongTensor(actions).to(self.device).unsqueeze(-1)).squeeze(-1)
+        loss = self.engine.compute_loss(img_states, hist_states, actions, rewards, 
+                                        img_next, hist_next, dones, self.loss_fn, self.device)
         
-        # Next Q-Values
-        self.model.eval()
-        with torch.no_grad():
-            next_q_vals = self.model(img_next, hist_next)
-            max_next_q = next_q_vals.max(dim=1)[0]
-        self.model.train()
-        
-        target_q = rewards + (1 - dones) * self.gamma * max_next_q
-        
-        loss = self.loss_fn(q_acts, target_q)
         loss.backward()
         
         if self.clip_grad > 0:

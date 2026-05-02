@@ -121,7 +121,7 @@ def train_stdp_pretraining(model, dataset, device, stdp_epochs=3, lr_decay=0.5):
     
     print("--- STDP Pre-training Complete ---\n")
 
-def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20):
+def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20, target_update=1):
     """Standard DQN Training Loop"""
     epsilon = epsilon_start
     epsilon_decay = (epsilon_start - epsilon_min) / decay_steps
@@ -178,6 +178,11 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
         history_loss.append(avg_loss)
         history_epsilon.append(epsilon)
         
+        # Update target network
+        if epoch % target_update == 0:
+            agent.update_target_network()
+            print("Target network updated.")
+            
         # Save model based on mode
         if save_mode == "best" and avg_loss < best_loss:
             torch.save(agent.model.state_dict(), save_path)
@@ -265,6 +270,10 @@ def main():
     parser.add_argument('--stdp-epochs', type=int, default=3, help="Number of STDP pretraining epochs")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     
+    # Engine parameters
+    parser.add_argument('--algo', type=str, choices=['dqn', 'ddqn', 'dueling'], default='dqn', help="RL algorithm to use")
+    parser.add_argument('--target-update', type=int, default=1, help="Epochs between target network updates")
+    
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -280,14 +289,16 @@ def main():
 
     # 2. Initialize Model
     history_dim = 9 * args.replay
+    is_dueling = (args.algo == 'dueling')
+    
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
+        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim, dueling=is_dueling)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
+        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim, dueling=is_dueling)
     elif args.method == 'stdp':
         if args.backbone == 'vgg16':
             raise NotImplementedError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
-        model = SQNSTDP(history_dim=history_dim)
+        model = SQNSTDP(history_dim=history_dim, dueling=is_dueling)
         
     model = model.to(device)
     optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
@@ -298,9 +309,20 @@ def main():
         # Re-initialize optimizer because STDP freezes some layers and we only want RL head to train
         optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
 
-    # 4. Initialize Agent
+    # 4. Initialize Engine
+    from backbone.engine import DQNEngine, DoubleDQNEngine
+    if args.algo == 'ddqn':
+        engine = DoubleDQNEngine(model, gamma=args.gamma, use_target_net=True)
+    elif args.algo == 'dueling':
+        engine = DQNEngine(model, gamma=args.gamma, use_target_net=True)
+    else:
+        # standard dqn
+        engine = DQNEngine(model, gamma=args.gamma, use_target_net=True)
+
+    # 5. Initialize Agent
     agent = LocalizationAgent(
-        model=model, 
+        model=model,
+        engine=engine,
         optimizer=optimizer, 
         device=device, 
         gamma=args.gamma,
@@ -313,15 +335,16 @@ def main():
         history_size=args.replay
     )
     
-    # 5. Train RL
-    print(f"Starting RL Loop using {args.method} mechanism...")
+    # 6. Train RL
+    print(f"Starting RL Loop using {args.method} mechanism with {args.algo.upper()}...")
     save_path = f"weights/{args.method}_{args.target}.pth"
     losses, epsilons = run_rl_training(
         agent, dataset, epochs=args.epochs, 
         early_stop_patience=args.early_stop,
         save_mode=args.save,
         save_path=save_path,
-        batch_size=args.batch_size
+        batch_size=args.batch_size,
+        target_update=args.target_update
     )
     
     if args.logging:

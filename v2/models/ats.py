@@ -6,7 +6,7 @@ import torchvision.transforms as T
 from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone
 
 class SQNConverted(nn.Module):
-    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, backbone_name='conv'):
+    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, backbone_name='conv', dueling=False):
         super(SQNConverted, self).__init__()
         
         self.input_dim = input_dim
@@ -14,6 +14,7 @@ class SQNConverted(nn.Module):
         self.history_dim = history_dim
         self.simulation_time = simulation_time
         self.backbone_name = backbone_name
+        self.dueling = dueling
         
         self.is_snn = False # Flag indicating if it has been converted
         
@@ -28,13 +29,23 @@ class SQNConverted(nn.Module):
             
         self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
-        self.fc = nn.Sequential(
-            nn.Linear(self.fc_input_dim, 128),
-            nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Linear(256, self.output_dim)
-        )
+        if self.dueling:
+            from backbone.engine import DuelingHead
+            self.fc = nn.Sequential(
+                nn.Linear(self.fc_input_dim, 128),
+                nn.ReLU(),
+                nn.Linear(128, 256),
+                nn.ReLU(),
+                DuelingHead(256, 128, self.output_dim)
+            )
+        else:
+            self.fc = nn.Sequential(
+                nn.Linear(self.fc_input_dim, 128),
+                nn.ReLU(),
+                nn.Linear(128, 256),
+                nn.ReLU(),
+                nn.Linear(256, self.output_dim)
+            )
 
     def forward(self, state, history):
         if not self.is_snn:
@@ -45,6 +56,8 @@ class SQNConverted(nn.Module):
             q_values = self.fc(x)
             return q_values
         else:
+            if self.dueling:
+                raise NotImplementedError("Dueling Architecture is not currently supported in the manual ATS SNN conversion loop.")
             # SNN Forward pass (Integrate and Fire simulation)
             state_size = state.size(0)
             device = state.device
