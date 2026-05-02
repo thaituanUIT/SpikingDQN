@@ -66,7 +66,7 @@ class SQNConverted(nn.Module):
             
             # ATS conversion normally skips VGG/ResNet and only applies to the trained RL head
             # Or we can treat pre-trained output as a constant current.
-            if self.backbone_name in ['vgg16', 'resnet18']:
+            if self.backbone_name in ['vgg16', 'resnet18', 'fusion']:
                 with torch.no_grad():
                     constant_features = self.backbone(state)
             
@@ -77,7 +77,7 @@ class SQNConverted(nn.Module):
             for t in range(self.simulation_time):
                 x_in = state
                 
-                if self.backbone_name in ['vgg16', 'resnet18']:
+                if self.backbone_name in ['vgg16', 'resnet18', 'fusion']:
                     features = constant_features
                 else:
                     # Manual pass through layers to track membrane potentials
