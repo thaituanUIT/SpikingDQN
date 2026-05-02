@@ -70,8 +70,8 @@ class SQNConverted(nn.Module):
                 with torch.no_grad():
                     constant_features = self.backbone(state)
             
-            mem_conv = [None] * 4 # Adjust if needed
-            mem_fc = [None] * 2
+            mem_conv = {}
+            mem_fc = {}
             
             # We assume input is constant current over time
             for t in range(self.simulation_time):
@@ -83,10 +83,10 @@ class SQNConverted(nn.Module):
                     # Manual pass through layers to track membrane potentials
                     c_idx = 0
                     for layer in self.backbone.get_layers():
-                        if isinstance(layer, nn.Conv2d):
+                        if isinstance(layer, (nn.Conv2d, nn.MaxPool2d, nn.Flatten, nn.Linear)):
                             x_in = layer(x_in)
                         elif isinstance(layer, nn.ReLU):
-                            if mem_conv[c_idx] is None:
+                            if c_idx not in mem_conv:
                                 mem_conv[c_idx] = torch.zeros_like(x_in)
                             mem_conv[c_idx] += x_in
                             spikes = (mem_conv[c_idx] >= 1.0).float()
@@ -103,7 +103,7 @@ class SQNConverted(nn.Module):
                     if isinstance(layer, nn.Linear):
                         x_in = layer(x_in)
                     elif isinstance(layer, nn.ReLU):
-                        if mem_fc[f_idx] is None:
+                        if f_idx not in mem_fc:
                             mem_fc[f_idx] = torch.zeros_like(x_in)
                         mem_fc[f_idx] += x_in
                         spikes = (mem_fc[f_idx] >= 1.0).float()
