@@ -10,7 +10,7 @@ from data.voc import VOCDataset
 from agents.localization_agent import LocalizationAgent
 from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
-from models.stdp import SQNSTDP
+# from models.stdp import SQNSTDP
 
 from helpers.utils import get_optimizer, plot_training_results
 from helpers.trainer import train_stdp_pretraining, run_rl_training
@@ -20,15 +20,15 @@ def main():
     
     # Core Parameters
     core_group = parser.add_argument_group('Core Parameters')
-    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True, help="SNN method to use")
-    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv', help="Feature extractor backbone")
+    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats'], required=True, help="SNN method to use")
+    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18', 'fusion'], default='conv', help="Feature extractor backbone")
     core_group.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
     core_group.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
     core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     
     # RL/Agent Parameters
     rl_group = parser.add_argument_group('RL/Agent Parameters')
-    rl_group.add_argument('--algo', type=str, choices=['dqn', 'ddqn', 'dueling'], default='dqn', help="RL algorithm to use")
+    rl_group.add_argument('--algo', type=str, choices=['dqn', 'double', 'dueling'], default='dqn', help="RL algorithm to use")
     rl_group.add_argument('--gamma', type=float, default=0.99, help="Discount factor for future rewards")
     rl_group.add_argument('--epochs', type=int, default=10, help="Number of RL epochs")
     rl_group.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
@@ -42,7 +42,7 @@ def main():
     # SNN Parameters
     snn_group = parser.add_argument_group('SNN Parameters')
     snn_group.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
-    snn_group.add_argument('--stdp-epochs', type=int, default=3, help="Number of STDP pretraining epochs")
+    # snn_group.add_argument('--stdp-epochs', type=int, default=3, help="Number of STDP pretraining epochs")
     
     # Optimizer/Training Parameters
     train_group = parser.add_argument_group('Training/Optimizer Parameters')
@@ -79,23 +79,23 @@ def main():
         model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim, dueling=is_dueling)
     elif args.method == 'ats':
         model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim, dueling=is_dueling)
-    elif args.method == 'stdp':
-        if args.backbone == 'vgg16':
-            raise NotImplementedError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
-        model = SQNSTDP(history_dim=history_dim, dueling=is_dueling)
+    # elif args.method == 'stdp':
+    #     if args.backbone == 'vgg16':
+    #         raise NotImplementedError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
+    #     model = SQNSTDP(history_dim=history_dim, dueling=is_dueling)
         
     model = model.to(device)
     optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
     
-    # 3. Handle STDP Specifics
-    if args.method == 'stdp':
-        train_stdp_pretraining(model, dataset, device, stdp_epochs=args.stdp_epochs)
-        # Re-initialize optimizer because STDP freezes some layers and we only want RL head to train
-        optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
+    # # 3. Handle STDP Specifics
+    # if args.method == 'stdp':
+    #     train_stdp_pretraining(model, dataset, device, stdp_epochs=args.stdp_epochs)
+    #     # Re-initialize optimizer because STDP freezes some layers and we only want RL head to train
+    #     optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
 
     # 4. Initialize Engine
     from backbone.engine import DQNEngine, DoubleDQNEngine
-    if args.algo == 'ddqn':
+    if args.algo == 'double':
         engine = DoubleDQNEngine(model, gamma=args.gamma, use_target_net=True)
     elif args.algo == 'dueling':
         engine = DQNEngine(model, gamma=args.gamma, use_target_net=True)
