@@ -10,100 +10,31 @@ from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
 from models.stdp import SQNSTDP
 
-def test_model(agent, dataset, logging=False, output_file='test_results.csv'):
-    print(f"\n--- Starting Evaluation on {len(dataset)} samples ---")
-    
-    total_iou = []
-    total_steps = []
-    log_data = []
-    
-    for idx in range(len(dataset)):
-        sample = dataset[idx]
-        image = sample['image']
-        ground_truth = sample['box']
-        
-        history = [-1] * agent.history_size
-        height, width, _ = image.shape
-        current_mask = np.asarray([0, 0, width, height])
-        
-        step = 0
-        done = False
-        masks = []
-        
-        # Test Loop (greedy policy)
-        while not done and step < agent.max_steps:
-            # feature extraction
-            img_tensor, hist_tensor = agent.feature_extract(image, history, width, height, current_mask)
-            
-            # Predict action (epsilon = 0.0 for greedy)
-            agent.model.eval()
-            with torch.no_grad():
-                q_values = agent.model(img_tensor.to(agent.device), hist_tensor.to(agent.device))
-                action = torch.argmax(q_values).item()
-                
-            history = history[1:] + [action]
-            
-            if action == 8:
-                done = True
-                new_mask = current_mask
-            else:
-                new_mask = agent.compute_mask(action, current_mask)
-                
-            masks.append(new_mask)
-            current_mask = new_mask
-            step += 1
-            
-        final_mask = current_mask
-        iou = agent.compute_iou(final_mask, ground_truth)
-        total_iou.append(iou)
-        total_steps.append(step)
-        
-        log_data.append({
-            'Image_ID': idx+1,
-            'Ground_Truth': tuple(ground_truth),
-            'Prediction': tuple(final_mask),
-            'Steps': step,
-            'IoU': iou
-        })
-        
-        print(f"Sample {idx+1}: IoU = {iou:.4f}, Steps taken = {step}")
-        
-        
-    avg_iou = np.mean(total_iou) if total_iou else 0
-    avg_steps = np.mean(total_steps) if total_steps else 0
-    
-    acc_03 = sum(1 for iou in total_iou if iou >= 0.3) / len(total_iou) if total_iou else 0
-    acc_05 = sum(1 for iou in total_iou if iou >= 0.5) / len(total_iou) if total_iou else 0
-    acc_07 = sum(1 for iou in total_iou if iou >= 0.7) / len(total_iou) if total_iou else 0
-    
-    print(f"\n--- Evaluation Metrics ---")
-    print(f"Average Final IoU: {avg_iou:.4f}")
-    print(f"Average Steps Taken: {avg_steps:.2f}")
-    print(f"Localization Accuracy (IoU >= 0.3): {acc_03*100:.2f}%")
-    print(f"Localization Accuracy (IoU >= 0.5): {acc_05*100:.2f}%")
-    print(f"Localization Accuracy (IoU >= 0.7): {acc_07*100:.2f}%")
-    
-    if logging:
-        os.makedirs('logs', exist_ok=True)
-        csv_path = os.path.join('logs', output_file)
-        with open(csv_path, mode='w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['Image_ID', 'Ground_Truth', 'Prediction', 'Steps', 'IoU'])
-            writer.writeheader()
-            writer.writerows(log_data)
-        print(f"-> Detailed metrics logged to {csv_path}")
-
+from helpers.tester import test_model
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Testing (v2)")
-    parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
-    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv')
-    parser.add_argument('--target', type=str, default='mixing')
-    parser.add_argument('--num-samples', type=int, default=10) # Test on 10 samples by default
-    parser.add_argument('--simulate', type=int, default=10)
-    parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
-    parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
-    parser.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
-    parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
-    parser.add_argument('--logging', action='store_true', help="Log metrics to CSV")
+    
+    # Core Parameters
+    core_group = parser.add_argument_group('Core Parameters')
+    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
+    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv')
+    core_group.add_argument('--target', type=str, default='mixing')
+    core_group.add_argument('--num-samples', type=int, default=10, help="Test on 10 samples by default")
+    core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
+    
+    # Agent Parameters
+    agent_group = parser.add_argument_group('Agent Parameters')
+    agent_group.add_argument('--replay', type=int, default=10, help="History size (history_size)")
+    agent_group.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
+    
+    # SNN Parameters
+    snn_group = parser.add_argument_group('SNN Parameters')
+    snn_group.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
+    
+    # System Parameters
+    sys_group = parser.add_argument_group('System Parameters')
+    sys_group.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
+    sys_group.add_argument('--logging', action='store_true', help="Log metrics to CSV")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

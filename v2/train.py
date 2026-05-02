@@ -12,267 +12,51 @@ from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
 from models.stdp import SQNSTDP
 
-def get_optimizer(model, opt_name, lr, weight_decay=0.0):
-    """Factory function to create the requested optimizer"""
-    parameters = filter(lambda p: p.requires_grad, model.parameters())
-    
-    if opt_name == 'adam':
-        return optim.Adam(parameters, lr=lr, weight_decay=weight_decay)
-    elif opt_name == 'adamw':
-        return optim.AdamW(parameters, lr=lr, weight_decay=weight_decay if weight_decay > 0 else 0.01)
-    elif opt_name == 'rmsprop':
-        return optim.RMSprop(parameters, lr=lr, alpha=0.99, eps=1e-8, weight_decay=weight_decay)
-    elif opt_name == 'sgd':
-        return optim.SGD(parameters, lr=lr, momentum=0.9, weight_decay=weight_decay)
-    elif opt_name == 'radam':
-        return optim.RAdam(parameters, lr=lr, weight_decay=weight_decay)
-    else:
-        raise ValueError(f"Unknown optimizer: {opt_name}")
-
-def train_stdp_pretraining(model, dataset, device, stdp_epochs=3, lr_decay=0.5):
-    """
-    Unsupervised STDP Pre-training phase for the Backbone.
-    Runs multiple epochs with decaying STDP learning rates to allow
-    the convolutional filters to converge to stable feature detectors.
-    After pretraining, validates that the backbone produces meaningful features.
-    """
-    print(f"\n--- Starting Unsupervised STDP Pre-training ({stdp_epochs} epochs) ---")
-    model.set_pretrain_mode(True)
-    
-    # Store original LRs so we can decay them
-    stdp_layers = [model.conv1, model.conv2, model.conv3]
-    original_lrs = [(l.lr_plus, l.lr_minus) for l in stdp_layers]
-    
-    for ep in range(1, stdp_epochs + 1):
-        # Decay LR each epoch
-        decay_factor = lr_decay ** (ep - 1)
-        for layer, (lr_p, lr_m) in zip(stdp_layers, original_lrs):
-            layer.lr_plus = lr_p * decay_factor
-            layer.lr_minus = lr_m * decay_factor
-        
-        print(f"STDP Epoch {ep}/{stdp_epochs} (LR decay factor: {decay_factor:.3f})")
-        
-        for idx in range(len(dataset)):
-            sample = dataset[idx]
-            img = sample['image']
-            
-            # Format image for STDP
-            img_transposed = np.transpose(img, (2, 0, 1))
-            img_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(device) / 255.0
-            
-            # Forward pass triggers STDP weight updates internally
-            model(img_tensor, None)
-            
-            if (idx + 1) % 10 == 0:
-                stats = model.get_backbone_stats()
-                conv1_fr = stats['conv1']['firing_rate_mean']
-                conv2_fr = stats['conv2']['firing_rate_mean']
-                conv3_fr = stats['conv3']['firing_rate_mean']
-                print(f"[{idx+1}/{len(dataset)}] Firing rates: "
-                      f"C1={conv1_fr:.4f} C2={conv2_fr:.4f} C3={conv3_fr:.4f} | "
-                      f"Thresh: C1={stats['conv1']['threshold_mean']:.1f} "
-                      f"C2={stats['conv2']['threshold_mean']:.1f} "
-                      f"C3={stats['conv3']['threshold_mean']:.1f}")
-    
-    # --- Feature Validation Checkpoint ---
-    print("\n  Validating backbone features...")
-    model.set_pretrain_mode(False)  # Temporarily disable STDP for clean forward
-    
-    with torch.no_grad():
-        # Run a few images through and check feature statistics
-        feature_stats = []
-        num_check = min(5, len(dataset))
-        for idx in range(num_check):
-            sample = dataset[idx]
-            img = sample['image']
-            img_transposed = np.transpose(img, (2, 0, 1))
-            img_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(device) / 255.0
-            
-            # Get features from backbone
-            x = model.dog(img_tensor)
-            latencies = model._encode_latencies(x)
-            c1 = model.conv1(latencies)
-            c1 = model.pool(c1)
-            c2 = model.conv2(c1)
-            c2 = model.pool(c2)
-            c3 = model.conv3(c2)
-            c3 = model.pool(c3)
-            
-            flat = c3.reshape(1, -1)
-            nonzero_frac = (flat != 0).float().mean().item()
-            feat_std = flat.std().item()
-            feat_mean = flat.mean().item()
-            feature_stats.append((nonzero_frac, feat_std, feat_mean))
-        
-        avg_nz = np.mean([s[0] for s in feature_stats])
-        avg_std = np.mean([s[1] for s in feature_stats])
-        avg_mean = np.mean([s[2] for s in feature_stats])
-        
-        print(f"\nFeature stats (avg over {num_check} images):")
-        print(f"Non-zero fraction: {avg_nz:.4f} | Std: {avg_std:.4f} | Mean: {avg_mean:.4f}")
-    
-    # Final backbone stats
-    final_stats = model.get_backbone_stats()
-    print("\nFinal backbone diagnostics:")
-    for name, s in final_stats.items():
-        print(f"{name}: thresh={s['threshold_mean']:.2f}±{s['threshold_std']:.2f}, "
-              f"fire_rate={s['firing_rate_mean']:.4f}±{s['firing_rate_std']:.4f}, "
-              f"w_mean={s['weight_mean']:.4f}, w_std={s['weight_std']:.4f}")
-    
-    print("--- STDP Pre-training Complete ---\n")
-
-def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20, target_update=1):
-    """Standard DQN Training Loop"""
-    epsilon = epsilon_start
-    epsilon_decay = (epsilon_start - epsilon_min) / decay_steps
-    
-    # Track logs
-    history_loss = []
-    history_epsilon = []
-    
-    best_loss = float('inf')
-    patience_counter = 0
-    
-    # Ensure weights directory exists if saving
-    if save_mode != "none":
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-
-    for epoch in range(1, epochs + 1):
-        print(f"\n--- Epoch {epoch}/{epochs} ---")
-        epoch_loss = []
-        epoch_reward = 0
-        
-        for idx in range(len(dataset)):
-            sample = dataset[idx]
-            image = sample['image']
-            ground_truth = sample['box']
-            
-            history = [-1] * agent.history_size
-            height, width, _ = image.shape
-            current_mask = np.asarray([0, 0, width, height])
-            
-            step = 0
-            done = False
-            img_reward = 0
-            
-            while not done:
-                current_mask, reward, done, history = agent.step(
-                    image, history, current_mask, ground_truth, step, epsilon
-                )
-                
-                loss = agent.train_step(batch_size=batch_size)
-                if loss > 0:
-                    epoch_loss.append(loss)
-                    
-                img_reward += reward
-                step += 1
-                
-            epoch_reward += img_reward
-            
-            if (idx + 1) % 10 == 0:
-                print(f"Image {idx+1}: Reward = {img_reward}, Steps = {step}")
-        
-        avg_loss = sum(epoch_loss) / len(epoch_loss) if epoch_loss else 0
-        print(f"Epoch {epoch} Results: Avg Loss = {avg_loss:.4f}, Total Reward = {epoch_reward}, Epsilon = {epsilon:.2f}")
-        
-        history_loss.append(avg_loss)
-        history_epsilon.append(epsilon)
-        
-        # Update target network
-        if epoch % target_update == 0:
-            agent.update_target_network()
-            print("Target network updated.")
-            
-        # Save model based on mode
-        if save_mode == "best" and avg_loss < best_loss:
-            torch.save(agent.model.state_dict(), save_path)
-            print(f"New best model saved with Loss: {avg_loss:.4f}")
-        elif save_mode == "epoch":
-            epoch_save_path = save_path.replace(".pth", f"_epoch_{epoch}.pth")
-            torch.save(agent.model.state_dict(), epoch_save_path)
-            print(f"Model saved for epoch {epoch} to {epoch_save_path}")
-
-        if avg_loss < best_loss:
-            best_loss = avg_loss
-            patience_counter = 0
-        else:
-            patience_counter += 1
-
-        if epsilon > epsilon_min:
-            epsilon -= epsilon_decay
-            
-        if early_stop_patience > 0 and patience_counter >= early_stop_patience:
-            print(f"Early stopping triggered at epoch {epoch}. No improvement in Avg Loss for {early_stop_patience} epochs.")
-            break
-
-    return history_loss, history_epsilon
-
-def plot_training_results(losses, epsilons, method, target):
-    """Save training metrics to CSV and plot them"""
-    os.makedirs('logs', exist_ok=True)
-    
-    # Save to CSV
-    df = pd.DataFrame({
-        'epoch': range(1, len(losses) + 1),
-        'loss': losses,
-        'epsilon': epsilons
-    })
-    csv_path = f"logs/{method}_{target}_training_log.csv"
-    df.to_csv(csv_path, index=False)
-    print(f"Training logs saved to {csv_path}")
-    
-    # Plotting
-    fig, ax1 = plt.subplots(figsize=(10, 6))
-
-    color = 'tab:red'
-    ax1.set_xlabel('Epoch')
-    ax1.set_ylabel('Loss', color=color)
-    ax1.plot(range(1, len(losses) + 1), losses, color=color, label='Loss')
-    ax1.tick_params(axis='y', labelcolor=color)
-
-    ax2 = ax1.twinx()
-    color = 'tab:blue'
-    ax2.set_ylabel('Epsilon', color=color)
-    ax2.plot(range(1, len(epsilons) + 1), epsilons, color=color, label='Epsilon')
-    ax2.tick_params(axis='y', labelcolor=color)
-
-    plt.title(f"Training Metrics ({method} - {target})")
-    fig.tight_layout()
-    
-    plot_path = f"logs/{method}_{target}_metrics.png"
-    plt.savefig(plot_path)
-    print(f"Training plot saved to {plot_path}")
-    plt.close()
+from helpers.utils import get_optimizer, plot_training_results
+from helpers.trainer import train_stdp_pretraining, run_rl_training
 
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Training (v2)")
-    parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True, help="SNN method to use")
-    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv', help="Feature extractor backbone")
-    parser.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
-    parser.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
-    parser.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
-    parser.add_argument('--gamma', type=float, default=0.99, help="Discount factor for future rewards")
-    parser.add_argument('--epochs', type=int, default=10, help="Number of RL epochs")
-    parser.add_argument('--optimizer', type=str, choices=['adam', 'adamw', 'rmsprop', 'sgd', 'radam'], default='adam', help="Optimizer to use")
-    parser.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
-    parser.add_argument('--weight-decay', type=float, default=0.0, help="Weight decay for optimizer")
-    parser.add_argument('--clip-grad', type=float, default=1.0, help="Gradient clipping norm")
-    parser.add_argument('--early-stop', type=int, default=0, help="Early stopping if no improvement for N epochs")
-    parser.add_argument('--logging', action='store_true', help="Enable logging")
-    parser.add_argument('--save', type=str, choices = ["best", "last", "epoch", "none"], default="last", help="Save model mode")
-    parser.add_argument('--loss-fn', type=str, choices=['mse', 'huber', 'smooth_l1'], default='huber', help="Loss function for RL")
-    parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
-    parser.add_argument('--alpha', type=float, default=0.1, help="Mask transformation rate")
-    parser.add_argument('--nu', type=float, default=3.0, help="Trigger reward weight")
-    parser.add_argument('--threshold', type=float, default=0.5, help="IoU threshold for trigger reward")
-    parser.add_argument('--batch-size', type=int, default=20, help="Batch size for training")
-    parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
-    parser.add_argument('--stdp-epochs', type=int, default=3, help="Number of STDP pretraining epochs")
-    parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     
-    # Engine parameters
-    parser.add_argument('--algo', type=str, choices=['dqn', 'ddqn', 'dueling'], default='dqn', help="RL algorithm to use")
-    parser.add_argument('--target-update', type=int, default=1, help="Epochs between target network updates")
+    # Core Parameters
+    core_group = parser.add_argument_group('Core Parameters')
+    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True, help="SNN method to use")
+    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv', help="Feature extractor backbone")
+    core_group.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
+    core_group.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
+    core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
+    
+    # RL/Agent Parameters
+    rl_group = parser.add_argument_group('RL/Agent Parameters')
+    rl_group.add_argument('--algo', type=str, choices=['dqn', 'ddqn', 'dueling'], default='dqn', help="RL algorithm to use")
+    rl_group.add_argument('--gamma', type=float, default=0.99, help="Discount factor for future rewards")
+    rl_group.add_argument('--epochs', type=int, default=10, help="Number of RL epochs")
+    rl_group.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
+    rl_group.add_argument('--alpha', type=float, default=0.1, help="Mask transformation rate")
+    rl_group.add_argument('--nu', type=float, default=3.0, help="Trigger reward weight")
+    rl_group.add_argument('--threshold', type=float, default=0.5, help="IoU threshold for trigger reward")
+    rl_group.add_argument('--replay', type=int, default=10, help="History size (history_size)")
+    rl_group.add_argument('--target-update', type=int, default=1, help="Epochs between target network updates")
+    rl_group.add_argument('--loss-fn', type=str, choices=['mse', 'huber', 'smooth_l1'], default='huber', help="Loss function for RL")
+    
+    # SNN Parameters
+    snn_group = parser.add_argument_group('SNN Parameters')
+    snn_group.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
+    snn_group.add_argument('--stdp-epochs', type=int, default=3, help="Number of STDP pretraining epochs")
+    
+    # Optimizer/Training Parameters
+    train_group = parser.add_argument_group('Training/Optimizer Parameters')
+    train_group.add_argument('--optimizer', type=str, choices=['adam', 'adamw', 'rmsprop', 'sgd', 'radam'], default='adam', help="Optimizer to use")
+    train_group.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
+    train_group.add_argument('--weight-decay', type=float, default=0.0, help="Weight decay for optimizer")
+    train_group.add_argument('--clip-grad', type=float, default=1.0, help="Gradient clipping norm")
+    train_group.add_argument('--batch-size', type=int, default=20, help="Batch size for training")
+    train_group.add_argument('--early-stop', type=int, default=0, help="Early stopping if no improvement for N epochs")
+    
+    # Logging and Saving
+    log_group = parser.add_argument_group('Logging and Saving')
+    log_group.add_argument('--logging', action='store_true', help="Enable logging")
+    log_group.add_argument('--save', type=str, choices = ["best", "last", "epoch", "none"], default="last", help="Save model mode")
     
     args = parser.parse_args()
     
