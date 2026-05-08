@@ -53,14 +53,33 @@ class SQNSurrogate(nn.Module):
             
         self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
-        self.fc1 = nn.Linear(self.fc_input_dim, 128)
-        self.fc2 = nn.Linear(128, 256)
+        self.dropout = nn.Dropout
+
+        fc_layers = []
+        fc_layers.append(nn.Linear(self.fc_input_dim, 1024))
+        fc_layers.append(nn.ReLU(inplace=True))
+        fc_layers.append(self.dropout(0.2))
+        self.fc1 = nn.Sequential(*fc_layers)
+        
+        fc_layers = []
+        fc_layers.append(nn.Linear(1024, 512))
+        fc_layers.append(nn.ReLU(inplace=True))
+        fc_layers.append(self.dropout(0.2))
+        self.fc2 = nn.Sequential(*fc_layers)
+        
+        fc_layers = []
+        fc_layers.append(nn.Linear(512, 128))
+        fc_layers.append(nn.ReLU(inplace=True))
+        fc_layers.append(self.dropout(0.1))
+        fc_layers.append(nn.Linear(128, 64))
         
         if self.dueling:
             from backbone.engine import DuelingHead
-            self.fc3 = DuelingHead(256, 128, self.output_dim)
+            fc_layers.append(DuelingHead(64, 32, self.output_dim))
         else:
-            self.fc3 = nn.Linear(256, self.output_dim)
+            fc_layers.append(nn.Linear(64, self.output_dim))
+        
+        self.fc3 = nn.Sequential(*fc_layers)
 
     def forward(self, state, history):
         batch_size = state.size(0)
@@ -74,8 +93,8 @@ class SQNSurrogate(nn.Module):
         pot_sum = torch.zeros(batch_size, self.output_dim, device=device)
 
         # 2. Spiking Temporal Loop
-        mem1 = torch.zeros(batch_size, 128, device=device)
-        mem2 = torch.zeros(batch_size, 256, device=device)
+        mem1 = torch.zeros(batch_size, 1024, device=device)
+        mem2 = torch.zeros(batch_size, 512, device=device)
         mem3 = torch.zeros(batch_size, self.output_dim, device=device)
         
         syn1 = torch.zeros_like(mem1)

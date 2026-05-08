@@ -29,23 +29,31 @@ class SQNConverted(nn.Module):
             
         self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
+        self.dropout = nn.Dropout
+
+        fc_layers = []
+        fc_layers.append(nn.Linear(self.fc_input_dim, 1024))
+        fc_layers.append(nn.ReLU(inplace=True))
+        fc_layers.append(self.dropout(0.2))
+        
+        fc_layers.append(nn.Linear(1024, 512))
+        fc_layers.append(nn.ReLU(inplace=True))
+        fc_layers.append(self.dropout(0.2))
+        
+        fc_layers.append(nn.Linear(512, 128))
+        fc_layers.append(nn.ReLU(inplace=True))
+        fc_layers.append(self.dropout(0.1))
+        
+        fc_layers.append(nn.Linear(128, 64))
+        fc_layers.append(nn.ReLU(inplace=True))
+        
         if self.dueling:
             from backbone.engine import DuelingHead
-            self.fc = nn.Sequential(
-                nn.Linear(self.fc_input_dim, 128),
-                nn.ReLU(),
-                nn.Linear(128, 256),
-                nn.ReLU(),
-                DuelingHead(256, 128, self.output_dim)
-            )
+            fc_layers.append(DuelingHead(64, 32, self.output_dim))
         else:
-            self.fc = nn.Sequential(
-                nn.Linear(self.fc_input_dim, 128),
-                nn.ReLU(),
-                nn.Linear(128, 256),
-                nn.ReLU(),
-                nn.Linear(256, self.output_dim)
-            )
+            fc_layers.append(nn.Linear(64, self.output_dim))
+        
+        self.fc = nn.Sequential(*fc_layers)
 
     def forward(self, state, history):
         if not self.is_snn:
