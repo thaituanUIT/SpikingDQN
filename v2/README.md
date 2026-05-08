@@ -38,6 +38,19 @@ To improve convergence and feature abstraction during Reinforcement Learning, re
 
 Train an agent using the unified `train.py` script. The script automatically handles loading the VOC2012 dataset from the root directory.
 
+### Training Parameters (`train.py`)
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--method` | string | (required) | SNN method to use: `surrogate`, `ats`, or `stdp`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, or `resnet18`. |
+| `--target` | string | `mixing` | Target class (e.g., `aeroplane`) or `mixing` for all classes. |
+| `--num-samples`| int | `None` | Limit the number of samples loaded from VOC2012. |
+| `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
+| `--epochs` | int | `10` | Number of Reinforcement Learning epochs. |
+
+Usage Examples:
+
 ```bash
 # Basic Surrogate training isolating the "aeroplane" class
 python v2/train.py --method surrogate --target aeroplane --epochs 20
@@ -54,17 +67,52 @@ python v2/train.py --method stdp --target aeroplane
 
 ## Testing Usage
 
-Test the saved agent policies with visual playback using `test.py`:
+Test the saved agent policies with visual evaluation using `test.py`.
+
+### Testing Parameters (`test.py`)
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--method` | string | (required) | SNN method to evaluate: `surrogate`, `ats`, or `stdp`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, or `resnet18`. |
+| `--target` | string | `mixing` | Target class for evaluation. |
+| `--num-samples`| int | `10` | Number of samples to evaluate on. |
+| `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
+| `--logging` | flag | `False` | If set, logs detailed metrics (IoU, steps) to a CSV file in `logs/`. |
+| `--random` | flag | `False` | If `False`, uses samples from (0, num_samples). If `True`, uses random samples. |
+
+Usage Examples:
 
 ```bash
-# Test the Surrogate model with the visualizer displaying the search path (Blue bounds -> Red bounds)
-python v2/test.py --method surrogate --target aeroplane --render
+# Evaluate the Surrogate model on 50 random samples and log results
+python v2/test.py --method surrogate --target mixing --num-samples 50 --random --logging
 
-# Evaluate but suppress matplotlib rendering for speed
-python v2/test.py --method surrogate --target aeroplane
-
-# Test the ATS model (Simulates the SNN conversion during inference) using the VGG16 backbone
+# Evaluate the ATS model using the VGG16 backbone
 python v2/test.py --method ats --target mixing --backbone vgg16
+```
+
+## Visualization Usage
+
+Visualize the agent's search path (Blue bounds -> Red bounds) using the `render.py` script.
+
+### Rendering Parameters (`render.py`)
+
+| Parameter | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--method` | string | (required) | SNN method to evaluate: `surrogate`, `ats`, or `stdp`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, or `resnet18`. |
+| `--target` | string | `mixing` | Target class for evaluation. |
+| `--num-images`| int | `5` | Number of images to render. |
+| `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
+
+Usage Examples:
+
+```bash
+# Render the Surrogate model search path for 5 images
+python v2/render.py --method surrogate --target aeroplane --num-images 5
+
+# Render the ATS model using the VGG16 backbone
+python v2/render.py --method ats --target mixing --backbone vgg16
 ```
 
 ## Dataset 
