@@ -48,6 +48,8 @@ Train an agent using the unified `train.py` script. The script automatically han
 | `--num-samples`| int | `None` | Limit the number of samples loaded from VOC2012. |
 | `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
 | `--epochs` | int | `10` | Number of Reinforcement Learning epochs. |
+| `--early-stop` | int | `0` | Early stopping if no improvement in loss for N epochs (0 disables). |
+| `--save`       | string | `last` | Save model mode: `best`, `last`, `epoch`, or `none`. |
 
 Usage Examples:
 

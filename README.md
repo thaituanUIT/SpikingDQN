@@ -42,10 +42,11 @@ The `v2` framework is designed for ease of use. It supports 3 primary SNN Method
 ### Training
 
 Use `v2/train.py` to train an agent. You can specify a target class or use `mixing` to train on all objects.
+The training pipeline also supports early stopping (`--early-stop`) and saving the best model (`--save best`).
 
 ```bash
-# Train using Surrogate Gradients to localize aeroplanes
-python v2/train.py --method surrogate --target aeroplane --epochs 20
+# Train using Surrogate Gradients to localize aeroplanes (with early stopping and best model saving)
+python v2/train.py --method surrogate --target aeroplane --epochs 20 --early-stop 5 --save best
 
 # Train the ATS model using a VGG16 backbone
 python v2/train.py --method ats --target mixing --backbone vgg16 --epochs 50
