@@ -7,3 +7,5 @@ setup.sh
 weights/
 logs/
 eval/
+dataset/
+report/

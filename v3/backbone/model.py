@@ -96,6 +96,7 @@ class SimpleConvBackbone(FeatureExtractor):
         return self.conv
 
 class FusionBackbone(FeatureExtractor):
+    """Hybrid Backbone that fuses shallow (spatial) and deep (semantic) features"""
     def __init__(self, model_name='resnet18', pretrained=True, freeze=True):
         super(FusionBackbone, self).__init__()
         resnet = getattr(models, model_name)(pretrained=pretrained)
@@ -122,6 +123,7 @@ class FusionBackbone(FeatureExtractor):
             x3 = self.layer3(shallow)
             deep = self.layer4(x3)
             
+            # Upsample deep features to match shallow feature size for concatenation
             deep_up = F.interpolate(deep, size=shallow.shape[2:], mode='bilinear', align_corners=False)
             fused = torch.cat([shallow, deep_up], dim=1)
             fused_pooled = self.pool(fused)
@@ -142,6 +144,4 @@ class FusionBackbone(FeatureExtractor):
         return fused_pooled.reshape(fused_pooled.size(0), -1)
 
     def get_layers(self):
-        # This backbone has multiple parallel branches conceptually, 
-        # but returning a sequential list of the main path for now.
         return nn.Sequential(self.stem, self.layer1, self.layer2, self.layer3, self.layer4)

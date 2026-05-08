@@ -3,15 +3,12 @@ import torch
 import os
 import numpy as np
 import cv2
+import matplotlib.pyplot as plt
 
 from data.voc import VOCDataset
 from agents.localization_agent import LocalizationAgent
-from models.surrogate import SQNSurrogate
-from models.ats import SQNConverted
-from models.stdp import SQNSTDP
-
-import matplotlib.pyplot as plt
-
+from models.spikingjelly_model import SQNJelly
+from models.stdp_jelly_model import SQNSTDPJelly
 
 def render_predictions(agent, samples, save_dir=None):
     print(f"\n--- Rendering Visualizations for {len(samples)} samples ---")
@@ -82,20 +79,21 @@ def render_predictions(agent, samples, save_dir=None):
         print(f"Sample {idx+1} ({filename}): Displaying result...")
         plt.figure(figsize=(8, 6))
         plt.imshow(vis_img)
-        plt.title(f"Sample {idx+1} - Prediction")
+        plt.title(f"Sample {idx+1} - Prediction (v3)")
         plt.axis('off')
         plt.show()
+
     print("--- Visualization Complete ---")
 
 def main():
-    parser = argparse.ArgumentParser(description="Active Object Localization Visualization (v2)")
-    parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
-    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv')
+    parser = argparse.ArgumentParser(description="Active Object Localization Visualization (v3 - SpikingJelly)")
+    parser.add_argument('--method', type=str, choices=['jelly', 'stdp_jelly'], required=True)
+    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18', 'fusion'], default='conv')
     parser.add_argument('--target', type=str, default='mixing')
     parser.add_argument('--image-path', type=str, default=None, help="Path to specific image file")
     parser.add_argument('--num-images', type=int, default=5, help="Number of images if no path provided")
     parser.add_argument('--simulate', type=int, default=10)
-    parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
+    parser.add_argument('--replay', type=int, default=10, help="History size")
     parser.add_argument('--max-steps', type=int, default=20, help="Max steps per image")
     parser.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
@@ -104,9 +102,8 @@ def main():
     args = parser.parse_args()
 
     if args.save and not args.save_dir:
-        args.save_dir = f"renders/{args.method}_{args.target}"
+        args.save_dir = f"v3/renders/{args.method}_{args.target}"
 
-    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     if args.image_path:
@@ -125,33 +122,25 @@ def main():
         dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_images)
         samples = [dataset[i] for i in range(len(dataset))]
     
+    # Initialize Model
     history_dim = 9 * args.replay
-    if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
-    elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
-        model.is_snn = True
-    elif args.method == 'stdp':
-        if args.backbone == 'vgg16':
-            raise ValueError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
-        model = SQNSTDP(history_dim=history_dim)
-        model.set_pretrain_mode(False)
+    if args.method == 'jelly':
+        model = SQNJelly(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
+    elif args.method == 'stdp_jelly':
+        model = SQNSTDPJelly(simulation_time=args.simulate, history_dim=history_dim)
         
     model = model.to(device)
     
-    weight_path = args.weights if args.weights else f"weights/{args.method}_{args.target}.pth"
+    weight_path = args.weights if args.weights else f"v3/weights/{args.method}_{args.target}.pth"
     if os.path.exists(weight_path):
         model.load_state_dict(torch.load(weight_path, map_location=device))
         print(f"Loaded weights from {weight_path}")
     else:
         status = "Error" if args.weights else "Warning"
-        print(f"{status}: Weights not found at {weight_path}. Cannot render without trained weights.")
-        return
+        print(f"{status}: Weights not found at {weight_path}. Cannot render predictions correctly.")
         
     agent = LocalizationAgent(model=model, device=device, history_size=args.replay, max_steps=args.max_steps)
     render_predictions(agent, samples, save_dir=args.save_dir)
-
-
 
 if __name__ == '__main__':
     main()

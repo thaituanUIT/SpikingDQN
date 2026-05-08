@@ -8,9 +8,8 @@ import pandas as pd
 
 from data.voc import VOCDataset
 from agents.localization_agent import LocalizationAgent
-from models.surrogate import SQNSurrogate
-from models.ats import SQNConverted
-from models.stdp import SQNSTDP
+from models.spikingjelly_model import SQNJelly
+from models.stdp_jelly_model import SQNSTDPJelly
 
 def get_optimizer(model, opt_name, lr, weight_decay=0.0):
     """Factory function to create the requested optimizer"""
@@ -29,99 +28,28 @@ def get_optimizer(model, opt_name, lr, weight_decay=0.0):
     else:
         raise ValueError(f"Unknown optimizer: {opt_name}")
 
-def train_stdp_pretraining(model, dataset, device, stdp_epochs=3, lr_decay=0.5):
-    """
-    Unsupervised STDP Pre-training phase for the Backbone.
-    Runs multiple epochs with decaying STDP learning rates to allow
-    the convolutional filters to converge to stable feature detectors.
-    After pretraining, validates that the backbone produces meaningful features.
-    """
-    print(f"\n--- Starting Unsupervised STDP Pre-training ({stdp_epochs} epochs) ---")
+def train_stdp_pretraining(model, dataset, device):
+    """Unsupervised STDP Pre-training phase for the Backbone"""
+    print("\n--- Starting Unsupervised STDP Pre-training ---")
     model.set_pretrain_mode(True)
     
-    # Store original LRs so we can decay them
-    stdp_layers = [model.conv1, model.conv2, model.conv3]
-    original_lrs = [(l.lr_plus, l.lr_minus) for l in stdp_layers]
-    
-    for ep in range(1, stdp_epochs + 1):
-        # Decay LR each epoch
-        decay_factor = lr_decay ** (ep - 1)
-        for layer, (lr_p, lr_m) in zip(stdp_layers, original_lrs):
-            layer.lr_plus = lr_p * decay_factor
-            layer.lr_minus = lr_m * decay_factor
+    for idx in range(len(dataset)):
+        sample = dataset[idx]
+        img = sample['image']
+        img_transposed = np.transpose(img, (2, 0, 1))
+        img_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(device) / 255.0
         
-        print(f"STDP Epoch {ep}/{stdp_epochs} (LR decay factor: {decay_factor:.3f})")
+        # Forward pass triggers STDP weight updates internally
+        model(img_tensor, torch.zeros(1, model.history_dim, device=device))
         
-        for idx in range(len(dataset)):
-            sample = dataset[idx]
-            img = sample['image']
+        if (idx + 1) % 10 == 0:
+            print(f"Pre-training progress: {idx + 1}/{len(dataset)} images")
             
-            # Format image for STDP
-            img_transposed = np.transpose(img, (2, 0, 1))
-            img_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(device) / 255.0
-            
-            # Forward pass triggers STDP weight updates internally
-            model(img_tensor, None)
-            
-            if (idx + 1) % 10 == 0:
-                stats = model.get_backbone_stats()
-                conv1_fr = stats['conv1']['firing_rate_mean']
-                conv2_fr = stats['conv2']['firing_rate_mean']
-                conv3_fr = stats['conv3']['firing_rate_mean']
-                print(f"[{idx+1}/{len(dataset)}] Firing rates: "
-                      f"C1={conv1_fr:.4f} C2={conv2_fr:.4f} C3={conv3_fr:.4f} | "
-                      f"Thresh: C1={stats['conv1']['threshold_mean']:.1f} "
-                      f"C2={stats['conv2']['threshold_mean']:.1f} "
-                      f"C3={stats['conv3']['threshold_mean']:.1f}")
-    
-    # --- Feature Validation Checkpoint ---
-    print("\n  Validating backbone features...")
-    model.set_pretrain_mode(False)  # Temporarily disable STDP for clean forward
-    
-    with torch.no_grad():
-        # Run a few images through and check feature statistics
-        feature_stats = []
-        num_check = min(5, len(dataset))
-        for idx in range(num_check):
-            sample = dataset[idx]
-            img = sample['image']
-            img_transposed = np.transpose(img, (2, 0, 1))
-            img_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(device) / 255.0
-            
-            # Get features from backbone
-            x = model.dog(img_tensor)
-            latencies = model._encode_latencies(x)
-            c1 = model.conv1(latencies)
-            c1 = model.pool(c1)
-            c2 = model.conv2(c1)
-            c2 = model.pool(c2)
-            c3 = model.conv3(c2)
-            c3 = model.pool(c3)
-            
-            flat = c3.reshape(1, -1)
-            nonzero_frac = (flat != 0).float().mean().item()
-            feat_std = flat.std().item()
-            feat_mean = flat.mean().item()
-            feature_stats.append((nonzero_frac, feat_std, feat_mean))
-        
-        avg_nz = np.mean([s[0] for s in feature_stats])
-        avg_std = np.mean([s[1] for s in feature_stats])
-        avg_mean = np.mean([s[2] for s in feature_stats])
-        
-        print(f"\nFeature stats (avg over {num_check} images):")
-        print(f"Non-zero fraction: {avg_nz:.4f} | Std: {avg_std:.4f} | Mean: {avg_mean:.4f}")
-    
-    # Final backbone stats
-    final_stats = model.get_backbone_stats()
-    print("\nFinal backbone diagnostics:")
-    for name, s in final_stats.items():
-        print(f"{name}: thresh={s['threshold_mean']:.2f}±{s['threshold_std']:.2f}, "
-              f"fire_rate={s['firing_rate_mean']:.4f}±{s['firing_rate_std']:.4f}, "
-              f"w_mean={s['weight_mean']:.4f}, w_std={s['weight_std']:.4f}")
-    
+    model.set_pretrain_mode(False)
     print("--- STDP Pre-training Complete ---\n")
 
-def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20):
+def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, 
+                    early_stop_patience=0, save_mode="none", save_path="v3/weights/best_model.pth", batch_size=20):
     """Standard DQN Training Loop"""
     epsilon = epsilon_start
     epsilon_decay = (epsilon_start - epsilon_min) / decay_steps
@@ -204,7 +132,7 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
 
 def plot_training_results(losses, epsilons, method, target):
     """Save training metrics to CSV and plot them"""
-    os.makedirs('logs', exist_ok=True)
+    os.makedirs('v3/logs', exist_ok=True)
     
     # Save to CSV
     df = pd.DataFrame({
@@ -212,7 +140,7 @@ def plot_training_results(losses, epsilons, method, target):
         'loss': losses,
         'epsilon': epsilons
     })
-    csv_path = f"logs/{method}_{target}_training_log.csv"
+    csv_path = f"v3/logs/{method}_{target}_training_log.csv"
     df.to_csv(csv_path, index=False)
     print(f"Training logs saved to {csv_path}")
     
@@ -231,22 +159,22 @@ def plot_training_results(losses, epsilons, method, target):
     ax2.plot(range(1, len(epsilons) + 1), epsilons, color=color, label='Epsilon')
     ax2.tick_params(axis='y', labelcolor=color)
 
-    plt.title(f"Training Metrics ({method} - {target})")
+    plt.title(f"Training Metrics (v3 {method} - {target})")
     fig.tight_layout()
     
-    plot_path = f"logs/{method}_{target}_metrics.png"
+    plot_path = f"v3/logs/{method}_{target}_metrics.png"
     plt.savefig(plot_path)
     print(f"Training plot saved to {plot_path}")
     plt.close()
 
 def main():
-    parser = argparse.ArgumentParser(description="Active Object Localization Training (v2)")
-    parser.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True, help="SNN method to use")
-    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv', help="Feature extractor backbone")
+    parser = argparse.ArgumentParser(description="Active Object Localization Training (v3 - SpikingJelly)")
+    parser.add_argument('--method', type=str, choices=['jelly', 'stdp_jelly'], required=True, help="SNN method to use")
+    parser.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18', 'fusion'], default='conv', help="Feature extractor backbone")
     parser.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
     parser.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
     parser.add_argument('--simulate', type=int, default=10, help="Simulation timesteps for SNN")
-    parser.add_argument('--gamma', type=float, default=0.99, help="Discount factor for future rewards")
+    parser.add_argument('--gamma', type=float, default=0.9, help="Discount factor for future rewards")
     parser.add_argument('--epochs', type=int, default=10, help="Number of RL epochs")
     parser.add_argument('--optimizer', type=str, choices=['adam', 'adamw', 'rmsprop', 'sgd', 'radam'], default='adam', help="Optimizer to use")
     parser.add_argument('--lr', type=float, default=1e-4, help="Learning rate")
@@ -262,9 +190,8 @@ def main():
     parser.add_argument('--threshold', type=float, default=0.5, help="IoU threshold for trigger reward")
     parser.add_argument('--batch-size', type=int, default=20, help="Batch size for training")
     parser.add_argument('--replay', type=int, default=10, help="History size (history_size)")
-    parser.add_argument('--stdp-epochs', type=int, default=3, help="Number of STDP pretraining epochs")
     parser.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
-    
+
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -280,22 +207,20 @@ def main():
 
     # 2. Initialize Model
     history_dim = 9 * args.replay
-    if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
-    elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
-    elif args.method == 'stdp':
-        if args.backbone == 'vgg16':
-            raise NotImplementedError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
-        model = SQNSTDP(history_dim=history_dim)
+    if args.method == 'jelly':
+        model = SQNJelly(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
+    elif args.method == 'stdp_jelly':
+        if args.backbone != 'conv':
+             raise ValueError("STDP Jelly method currently only supports the 'conv' backbone.")
+        model = SQNSTDPJelly(simulation_time=args.simulate, history_dim=history_dim)
         
     model = model.to(device)
     optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
     
     # 3. Handle STDP Specifics
-    if args.method == 'stdp':
-        train_stdp_pretraining(model, dataset, device, stdp_epochs=args.stdp_epochs)
-        # Re-initialize optimizer because STDP freezes some layers and we only want RL head to train
+    if args.method == 'stdp_jelly' and args.epochs > 0:
+        train_stdp_pretraining(model, dataset, device)
+        # Re-initialize optimizer because STDP might have frozen some layers
         optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
 
     # 4. Initialize Agent
@@ -314,8 +239,8 @@ def main():
     )
     
     # 5. Train RL
-    print(f"Starting RL Loop using {args.method} mechanism...")
-    save_path = f"weights/{args.method}_{args.target}.pth"
+    print(f"Starting RL Loop using SpikingJelly ({args.method})...")
+    save_path = f"v3/weights/{args.method}_{args.target}.pth"
     losses, epsilons = run_rl_training(
         agent, dataset, epochs=args.epochs, 
         early_stop_patience=args.early_stop,
@@ -327,20 +252,15 @@ def main():
     if args.logging:
         plot_training_results(losses, epsilons, args.method, args.target)
     
-    # 6. ATS Conversion (if applicable)
-    if args.method == 'ats':
-        print("\n--- Converting ANN to SNN ---")
-        model.convert_to_snn()
-
-    # 7. Save Weights
+    # 6. Save Weights
     if args.save == "last":
-        os.makedirs('weights', exist_ok=True)
+        os.makedirs('v3/weights', exist_ok=True)
         torch.save(model.state_dict(), save_path)
         print(f"Final model saved to {save_path}")
     elif args.save == "best":
         print(f"Best model was saved to {save_path}")
     elif args.save == "epoch":
-        print(f"Epoch models were saved in weights directory.")
+        print(f"Epoch models were saved in v3/weights directory.")
     else:
         print("Model saving skipped (none).")
 

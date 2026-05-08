@@ -9,7 +9,7 @@ class VOCDataset(Dataset):
     """
     Dataset loader for VOC2012 for Active Object Localization using torchvision.
     """
-    def __init__(self, root_dir, target_class="mixing", num_samples=None, split="train", use_random=False):
+    def __init__(self, root_dir, target_class="mixing", num_samples=None, split="train"):
         """
         Args:
             root_dir (str): Path to directory where torchvision will download/store VOC.
@@ -19,7 +19,6 @@ class VOCDataset(Dataset):
         """
         self.root_dir = root_dir
         self.target_class = target_class
-        self.use_random = use_random
         
         image_set = 'train'
         if split in ['train', 'trainval', 'val']:
@@ -32,15 +31,9 @@ class VOCDataset(Dataset):
         self._load_data(num_samples)
 
     def _load_data(self, num_samples):
-        print(f"Loading VOC dataset (Target: {self.target_class})...")
-        
-        # Determine which images to load. This can be refined to use ImageSets.
-        all_xmls = sorted(os.listdir(self.annotations_dir))
-        
-        # Only use a deterministic subset for randomness testing if not using exact splits
-        if self.use_random:
-            random.seed(42)
-            random.shuffle(all_xmls)
+        indices = list(range(len(self.voc)))
+        random.seed(42)
+        random.shuffle(indices)
 
         for i in indices:
             if num_samples is not None and len(self.samples) >= num_samples:

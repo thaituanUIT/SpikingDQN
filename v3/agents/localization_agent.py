@@ -51,7 +51,6 @@ class LocalizationAgent:
     def get_action(self, image_tensor, history_tensor, epsilon, current_mask, ground_truth):
         """
         Selects action using epsilon-greedy policy. 
-        If training (ground_truth provided), it can fallback to positive reward actions.
         """
         if random.random() > epsilon:
             self.model.eval()
@@ -127,20 +126,14 @@ class LocalizationAgent:
         new_mask = self.compute_mask(action, current_mask)
         iou_new = self.compute_iou(new_mask, ground_truth)
         iou_current = self.compute_iou(current_mask, ground_truth)
-
-        # Basic reward structure: positive if IoU improves
         return 1 if iou_new > iou_current else -1
 
     def compute_finish_reward(self, current_mask, ground_truth):
-        # +nu if terminated with IoU > threshold, else -nu
         return self.nu if self.compute_iou(current_mask, ground_truth) > self.threshold else -self.nu
 
     def feature_extract(self, img, history, width, height, current_mask):
-        """Converts mask to cropped image tensor and history list to tensor"""
         cropped_img = crop_and_resize(img, current_mask)
         img_transposed = np.transpose(cropped_img, (2, 0, 1)) 
-        
-        # SNN models might expect batches, so we add batch dim
         image_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float() / 255.0
         
         feat_hist = np.zeros(self.action_options * self.history_size)
@@ -155,7 +148,6 @@ class LocalizationAgent:
         height, width, _ = image.shape
         image_tensor, history_tensor = self.feature_extract(image, history, width, height, current_mask)
         
-        # Handle maximum steps termination
         if step_count >= self.max_steps:
             action = 8
         else:
@@ -173,7 +165,6 @@ class LocalizationAgent:
 
         next_image_tensor, next_history_tensor = self.feature_extract(image, history, width, height, new_mask)
         
-        # Store transition in numpy for simplicity in replay buffer
         state = {'image': image_tensor.numpy()[0], 'history': history_tensor.numpy()[0]}
         next_state = {'image': next_image_tensor.numpy()[0], 'history': next_history_tensor.numpy()[0]}
         
