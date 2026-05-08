@@ -74,19 +74,35 @@ class ResNetBackbone(FeatureExtractor):
 class SimpleConvBackbone(FeatureExtractor):
     def __init__(self, input_channels=3):
         super(SimpleConvBackbone, self).__init__()
+        
+        # [CONV -> RELU -> CONV -> RELU -> POOL]*3
         self.conv = nn.Sequential(
-            nn.Conv2d(input_channels, 32, kernel_size=8, stride=4),
+            # Block 1
+            nn.Conv2d(input_channels, 16, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=4, stride=2),
+            nn.Conv2d(16, 16, kernel_size=3, padding=1),
             nn.ReLU(),
-            nn.Conv2d(64, 64, kernel_size=3, stride=1),
-            nn.ReLU()
+            nn.MaxPool2d(2, 2),
+            
+            # Block 2
+            nn.Conv2d(16, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(32, 32, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2),
+            
+            # Block 3
+            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            nn.MaxPool2d(2, 2)
         )
         
         with torch.no_grad():
             dummy = torch.zeros(1, input_channels, 224, 224)
-            out = self.conv(dummy)
-            self.output_dim = out.reshape(1, -1).size(1)
+            conv_out = self.conv(dummy)
+            self.output_dim = conv_out.reshape(1, -1).size(1)
 
     def _extract(self, x):
         x = self.conv(x)

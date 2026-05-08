@@ -208,12 +208,13 @@ class STDPConv2d(nn.Module):
 
 
 class SQNSTDP(nn.Module):
-    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90):
+    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, dueling=False):
         super(SQNSTDP, self).__init__()
         
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.history_dim = history_dim
+        self.dueling = dueling
         
         # Retinal Processing
         self.dog = DoGFilter()
@@ -236,13 +237,23 @@ class SQNSTDP(nn.Module):
         self.feature_norm = nn.LayerNorm(conv_out_dim)
         
         # RL Decision Head (Trained with backprop/DQN)
-        self.fc = nn.Sequential(
-            nn.Linear(fc_input_dim, 128),
-            nn.ReLU(),
-            nn.Linear(128, 256),
-            nn.ReLU(),
-            nn.Linear(256, self.output_dim)
-        )
+        if self.dueling:
+            from backbone.engine import DuelingHead
+            self.fc = nn.Sequential(
+                nn.Linear(fc_input_dim, 128),
+                nn.ReLU(),
+                nn.Linear(128, 256),
+                nn.ReLU(),
+                DuelingHead(256, 128, self.output_dim)
+            )
+        else:
+            self.fc = nn.Sequential(
+                nn.Linear(fc_input_dim, 128),
+                nn.ReLU(),
+                nn.Linear(128, 256),
+                nn.ReLU(),
+                nn.Linear(256, self.output_dim)
+            )
 
     def set_pretrain_mode(self, mode):
         self.is_pretraining = mode

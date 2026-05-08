@@ -26,7 +26,7 @@ class SuperSpike(torch.autograd.Function):
 
 class SQNSurrogate(nn.Module):
     def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, 
-                 simulation_time=10, alpha=0.9, beta=0.8, threshold=1.0, backbone_name='conv'):
+                 simulation_time=10, alpha=0.9, beta=0.8, threshold=1.0, backbone_name='conv', dueling=False):
         super(SQNSurrogate, self).__init__()
         
         self.input_dim = input_dim
@@ -34,6 +34,7 @@ class SQNSurrogate(nn.Module):
         self.history_dim = history_dim
         self.simulation_time = simulation_time
         self.backbone_name = backbone_name
+        self.dueling = dueling
 
         
         self.alpha = alpha
@@ -54,7 +55,12 @@ class SQNSurrogate(nn.Module):
 
         self.fc1 = nn.Linear(self.fc_input_dim, 128)
         self.fc2 = nn.Linear(128, 256)
-        self.fc3 = nn.Linear(256, self.output_dim)
+        
+        if self.dueling:
+            from backbone.engine import DuelingHead
+            self.fc3 = DuelingHead(256, 128, self.output_dim)
+        else:
+            self.fc3 = nn.Linear(256, self.output_dim)
 
     def forward(self, state, history):
         batch_size = state.size(0)
