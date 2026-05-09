@@ -42,13 +42,30 @@ Train an agent using the unified `train.py` script. The script automatically han
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--method` | string | (required) | SNN method to use: `surrogate`, `ats`, or `stdp`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, or `resnet18`. |
+| `--method` | string | (required) | SNN method to use: `surrogate` or `ats`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, or `fusion`. |
 | `--target` | string | `mixing` | Target class (e.g., `aeroplane`) or `mixing` for all classes. |
-| `--num-samples`| int | `None` | Limit the number of samples loaded from VOC2012. |
-| `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
+| `--num-samples`| int | `None` | Limit the number of samples loaded from VOC. |
+| `--random` | flag | `False` | Random sample from dataset. |
+| `--voc-dir` | string | `None` | Override default VOC dataset directory. |
+| `--algo` | string | `dqn` | RL algorithm to use (`dqn`, `double`, `dueling`). |
+| `--gamma` | float | `0.99` | Discount factor for future rewards. |
 | `--epochs` | int | `10` | Number of Reinforcement Learning epochs. |
+| `--max-steps` | int | `20` | Max steps per image. |
+| `--alpha` | float | `0.1` | Mask transformation rate. |
+| `--nu` | float | `3.0` | Trigger reward weight. |
+| `--threshold` | float | `0.5` | IoU threshold for trigger reward. |
+| `--replay` | int | `10` | History size (`history_size`). |
+| `--target-update` | int | `1` | Epochs between target network updates. |
+| `--loss-fn` | string | `huber` | Loss function for RL (`mse`, `huber`, `smooth_l1`). |
+| `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
+| `--optimizer` | string | `adam` | Optimizer to use (`adam`, `adamw`, `rmsprop`, `sgd`, `radam`). |
+| `--lr` | float | `1e-4` | Learning rate. |
+| `--weight-decay` | float | `0.0` | Weight decay for optimizer. |
+| `--clip-grad` | float | `1.0` | Gradient clipping norm. |
+| `--batch-size` | int | `20` | Batch size for training. |
 | `--early-stop` | int | `0` | Early stopping if no improvement in loss for N epochs (0 disables). |
+| `--logging` | flag | `False` | Enable logging. |
 | `--save`       | string | `last` | Save model mode: `best`, `last`, `epoch`, or `none`. |
 
 Usage Examples:

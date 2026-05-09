@@ -34,6 +34,7 @@ class VOCDataset(Dataset):
     def _load_data(self, num_samples):
         print(f"Loading VOC dataset (Target: {self.target_class})...")
         
+        # Determine which images to load. This can be refined to use ImageSets.
         indices = list(range(len(self.voc)))
         
         # Only use a deterministic subset for randomness testing if not using exact splits

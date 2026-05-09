@@ -14,11 +14,11 @@ The project has evolved through several iterations. Researchers should focus the
 
 ## Dataset
 
-This project is tuned to work with the **PASCAL VOC 2012** dataset. It expects the data to be placed in a directory named `VOC2012/` at the root of the project.
+This project uses `torchvision` to load the **PASCAL VOC 2012** dataset. `torchvision` requires a very specific folder structure to detect existing files and avoid re-downloading them. 
 
 **Download the dataset here**: [PASCAL VOC 2012 (Google Drive)](https://drive.google.com/drive/folders/1ikKFR2nbdLw-W6cazaVYyYXCNUeXW6E7?usp=sharing)
 
-Ensure your root structue looks like this:
+Ensure your root structure looks exactly like this:
 ```
 PatternRecognition/
 ├── baseline/
