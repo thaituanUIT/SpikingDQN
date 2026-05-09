@@ -63,6 +63,8 @@ Train an agent using the unified `train.py` script. The script automatically han
 | `--clip-grad` | float | `1.0` | Gradient clipping norm. |
 | `--batch-size` | int | `20` | Batch size for training. |
 | `--early-stop` | int | `0` | Early stopping if no improvement for N epochs. |
+| `--validation` | string | `none` | Validation metric for saving the best model (`none`, `loss`, `iou`). |
+| `--val-ratio`  | float | `0.2` | Ratio of samples to reserve for validation if enabled. |
 | `--logging` | flag | `False` | Enable logging. |
 | `--save` | string | `last` | Save model mode (`best`, `last`, `epoch`, `none`). |
 
@@ -81,7 +83,7 @@ python v2/train.py --method ats --target aeroplane --simulate 15
 
 ## Testing Usage
 
-Test the saved agent policies with visual evaluation using `test.py`.
+Test the saved agent policies using `test.py`. Evaluation is now strictly performed on the **VOC2007 test set** using `tensorflow_datasets` (TFDS) to ensure a clean train/test boundary from the VOC2012 training data. Please ensure you have `tensorflow` and `tensorflow_datasets` installed.
 
 ### Testing Parameters (`test.py`)
 
@@ -90,8 +92,7 @@ Test the saved agent policies with visual evaluation using `test.py`.
 | `--method` | string | (required) | SNN method to evaluate: `surrogate` or `ats`. |
 | `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, or `fusion`. |
 | `--target` | string | `mixing` | Target class for evaluation. |
-| `--num-samples`| int | `10` | Number of samples to evaluate on. |
-| `--voc-dir` | string | `None` | Override default VOC2012 directory. |
+| `--num-samples`| int | `10` | Number of samples to evaluate on from VOC2007 test. |
 | `--replay` | int | `10` | History size. |
 | `--max-steps` | int | `20` | Max steps per image. |
 | `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
