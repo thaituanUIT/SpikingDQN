@@ -95,8 +95,9 @@ def train_stdp_pretraining(model, dataset, device, stdp_epochs=3, lr_decay=0.5):
     print("--- STDP Pre-training Complete ---\n")
 
 from torch.utils.data import WeightedRandomSampler
+from helpers.tester import test_model
 
-def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20, target_update=1):
+def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20, target_update=1, val_dataset=None, validation_mode='none'):
     """Standard DQN Training Loop"""
     epsilon = epsilon_start
     epsilon_decay = (epsilon_start - epsilon_min) / decay_steps
@@ -105,7 +106,7 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
     history_loss = []
     history_epsilon = []
     
-    best_loss = float('inf')
+    best_metric = -float('inf') if validation_mode == 'iou' else float('inf')
     patience_counter = 0
     
     # Ensure weights directory exists if saving
@@ -161,17 +162,38 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
             agent.update_target_network()
             print("Target network updated.")
             
+        val_iou = None
+        val_loss = None
+        if validation_mode != 'none' and val_dataset is not None:
+            val_iou, val_loss = test_model(agent, val_dataset, verbose=False)
+            print(f"Validation: IoU = {val_iou:.4f}, Loss = {val_loss:.4f}")
+            
+        # Determine tracking metric for early stop and saving
+        is_best = False
+        if validation_mode == 'iou' and val_dataset is not None:
+            if val_iou > best_metric:
+                is_best = True
+                best_metric = val_iou
+        elif validation_mode == 'loss' and val_dataset is not None:
+            if val_loss < best_metric:
+                is_best = True
+                best_metric = val_loss
+        else: # 'none' or missing val_dataset
+            if avg_loss < best_metric:
+                is_best = True
+                best_metric = avg_loss
+            
         # Save model based on mode
-        if save_mode == "best" and avg_loss < best_loss:
+        if save_mode == "best" and is_best:
             torch.save(agent.model.state_dict(), save_path)
-            print(f"New best model saved with Loss: {avg_loss:.4f}")
+            metric_str = f"Val IoU: {best_metric:.4f}" if validation_mode == 'iou' else (f"Val Loss: {best_metric:.4f}" if validation_mode == 'loss' else f"Avg Loss: {best_metric:.4f}")
+            print(f"New best model saved with {metric_str}")
         elif save_mode == "epoch":
             epoch_save_path = save_path.replace(".pth", f"_epoch_{epoch}.pth")
             torch.save(agent.model.state_dict(), epoch_save_path)
             print(f"Model saved for epoch {epoch} to {epoch_save_path}")
 
-        if avg_loss < best_loss:
-            best_loss = avg_loss
+        if is_best:
             patience_counter = 0
         else:
             patience_counter += 1
@@ -180,7 +202,8 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
             epsilon -= epsilon_decay
             
         if early_stop_patience > 0 and patience_counter >= early_stop_patience:
-            print(f"Early stopping triggered at epoch {epoch}. No improvement in Avg Loss for {early_stop_patience} epochs.")
+            metric_name = "Avg Loss" if validation_mode == 'none' else f"Val {validation_mode.upper()}"
+            print(f"Early stopping triggered at epoch {epoch}. No improvement in {metric_name} for {early_stop_patience} epochs.")
             break
 
     return history_loss, history_epsilon
