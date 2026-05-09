@@ -8,7 +8,7 @@ By formulating object localization as a Markov Decision Process (MDP), our RL ag
 
 The project has evolved through several iterations. Researchers should focus their efforts on `v2` for the most modular and up-to-date PyTorch implementation.
 
-*   `v2/` **(Active Branch)**: The streamlined, modular PyTorch codebase. Features three interchangeable SNN backbones (`surrogate`, `ats`, and `stdp`), unified data loading, and standardized testing/evaluation pipelines. **You should work with this directory.**
+*   `v2/` **(Active Branch)**: The streamlined, modular PyTorch codebase. Features two interchangeable SNN backbones (`surrogate` and `ats`), unified data loading, and standardized testing/evaluation pipelines. **You should work with this directory.**
 *   `baseline/`: Houses the standard, non-spiking Artificial Neural Network implementations (Standard Deep Q-Network) for baseline comparisons against the SNN agents.
 *   `v1/`: Legacy codebase containing earlier hybrid CNN-SNN experimentation.
 
@@ -31,13 +31,12 @@ PatternRecognition/
 
 ## Quick Start (v2 Architecture)
 
-The `v2` framework is designed for ease of use. It supports 3 primary SNN Methods:
+The `v2` framework is designed for ease of use. It supports 2 primary SNN Methods:
 
 1.  **Surrogate** (`--method surrogate`): Spiking Convolutional layers trained End-to-End via BPTT with surrogate gradients (`SuperSpike`).
 2.  **ATS** (`--method ats`): ANN-to-SNN. Trains as a regular CNN and simulates discrete Integration-and-Fire neurons during evaluation.
-3.  **STDP** (`--method stdp`): Unsupervised bio-plausible Feature Extraction using Difference of Gaussians (DoG) and Winner-Take-All lateral inhibition, followed by a spiking RL head.
 
-*(Note: `surrogate` and `ats` optionally support a frozen VGG16 backbone via `--backbone vgg16` for abstracted feature extraction).*
+*(Note: `surrogate` and `ats` optionally support frozen backbones like VGG16 via `--backbone vgg16` for abstracted feature extraction).*
 
 ### Training
 
@@ -49,9 +48,6 @@ python v2/train.py --method surrogate --target aeroplane --epochs 20
 
 # Train the ATS model using a VGG16 backbone
 python v2/train.py --method ats --target mixing --backbone vgg16 --epochs 50
-
-# Train using Biological STDP (Runs unsupervised pre-training automatically)
-python v2/train.py --method stdp --target aeroplane
 ```
 
 ### Evaluation & Testing

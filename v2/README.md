@@ -19,14 +19,12 @@ The agent receives a positive reward (+1) if the Intersection Over Union (IoU) w
 
 ## Available Methods
 
-The framework supports three interchangeable SNN architectures:
+The framework supports two interchangeable SNN architectures:
 
 1. **Surrogate (`--method surrogate`)**: 
    Standard Direct Training via Backpropagation Through Time (BPTT) using the `SuperSpike` surrogate gradient logic.
 2. **ATS (`--method ats`)**: 
    ANN-To-SNN conversion. Pre-trains the RL agent as a standard Convolutional Neural Network with ReLUs, and discretizes the weights logically into Integrate-and-Fire neurons for inference/evaluation.
-3. **STDP (`--method stdp`)**: 
-   A biologically plausible Spiking Deep Convolutional Neural Network utilizing Spiking Timing-Dependent Plasticity (STDP). Employs a Difference of Gaussians (DoG) filter to simulate retinal latencies and applies unsupervised Winner-Take-All lateral inhibition. *Requires raw 2D input and does not support 1D VGG16 backbones.*
 
 ## VGG16 Backbone Support
 
@@ -42,12 +40,31 @@ Train an agent using the unified `train.py` script. The script automatically han
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--method` | string | (required) | SNN method to use: `surrogate`, `ats`, or `stdp`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, or `resnet18`. |
+| `--method` | string | (required) | SNN method to use: `surrogate` or `ats`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, or `fusion`. |
 | `--target` | string | `mixing` | Target class (e.g., `aeroplane`) or `mixing` for all classes. |
 | `--num-samples`| int | `None` | Limit the number of samples loaded from VOC2012. |
-| `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
-| `--epochs` | int | `10` | Number of Reinforcement Learning epochs. |
+| `--random` | flag | `False` | Random sample from dataset. |
+| `--voc-dir` | string | `None` | Override default VOC2012 directory. |
+| `--algo` | string | `dqn` | RL algorithm (`dqn`, `double`, `dueling`). |
+| `--gamma` | float | `0.99` | Discount factor for future rewards. |
+| `--epochs` | int | `10` | Number of RL epochs. |
+| `--max-steps` | int | `20` | Max bounding box steps per image. |
+| `--alpha` | float | `0.1` | Mask transformation rate. |
+| `--nu` | float | `3.0` | Trigger reward weight. |
+| `--threshold` | float | `0.5` | IoU threshold for trigger reward. |
+| `--replay` | int | `10` | History size. |
+| `--target-update`| int | `1` | Epochs between target network updates. |
+| `--loss-fn` | string | `huber` | Loss function (`mse`, `huber`, `smooth_l1`). |
+| `--simulate` | int | `10` | Simulation timesteps for the SNN. |
+| `--optimizer` | string | `adam` | Optimizer (`adam`, `adamw`, `rmsprop`, `sgd`, `radam`). |
+| `--lr` | float | `1e-4` | Learning rate. |
+| `--weight-decay` | float | `0.0` | Weight decay for optimizer. |
+| `--clip-grad` | float | `1.0` | Gradient clipping norm. |
+| `--batch-size` | int | `20` | Batch size for training. |
+| `--early-stop` | int | `0` | Early stopping if no improvement for N epochs. |
+| `--logging` | flag | `False` | Enable logging. |
+| `--save` | string | `last` | Save model mode (`best`, `last`, `epoch`, `none`). |
 
 Usage Examples:
 
@@ -60,9 +77,6 @@ python v2/train.py --method surrogate --target mixing --backbone vgg16 --epochs 
 
 # ATS training with a 15-timestep simulation
 python v2/train.py --method ats --target aeroplane --simulate 15
-
-# Biological STDP training (NOTE: Automatically runs unsupervised STDP first, then DQN)
-python v2/train.py --method stdp --target aeroplane
 ```
 
 ## Testing Usage
@@ -73,13 +87,16 @@ Test the saved agent policies with visual evaluation using `test.py`.
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--method` | string | (required) | SNN method to evaluate: `surrogate`, `ats`, or `stdp`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, or `resnet18`. |
+| `--method` | string | (required) | SNN method to evaluate: `surrogate` or `ats`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, or `fusion`. |
 | `--target` | string | `mixing` | Target class for evaluation. |
 | `--num-samples`| int | `10` | Number of samples to evaluate on. |
+| `--voc-dir` | string | `None` | Override default VOC2012 directory. |
+| `--replay` | int | `10` | History size. |
+| `--max-steps` | int | `20` | Max steps per image. |
 | `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
-| `--logging` | flag | `False` | If set, logs detailed metrics (IoU, steps) to a CSV file in `logs/`. |
-| `--random` | flag | `False` | If `False`, uses samples from (0, num_samples). If `True`, uses random samples. |
+| `--weights` | string | `None` | Path to specific weights file. |
+| `--logging` | flag | `False` | Log metrics to CSV. |
 
 Usage Examples:
 
@@ -99,11 +116,18 @@ Visualize the agent's search path (Blue bounds -> Red bounds) using the `render.
 
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--method` | string | (required) | SNN method to evaluate: `surrogate`, `ats`, or `stdp`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, or `resnet18`. |
+| `--method` | string | (required) | SNN method to evaluate: `surrogate` or `ats`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, or `fusion`. |
 | `--target` | string | `mixing` | Target class for evaluation. |
-| `--num-images`| int | `5` | Number of images to render. |
+| `--image-path` | string | `None` | Path to specific image file to render. |
+| `--num-images`| int | `5` | Number of images to render if no path provided. |
+| `--voc-dir` | string | `None` | Override default VOC2012 directory. |
+| `--replay` | int | `10` | History size. |
+| `--max-steps` | int | `20` | Max steps per image. |
 | `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
+| `--weights` | string | `None` | Path to specific weights file. |
+| `--save` | flag | `False` | Save rendered images to disk. |
+| `--save-dir` | string | `None` | Directory to save rendered images. |
 
 Usage Examples:
 
