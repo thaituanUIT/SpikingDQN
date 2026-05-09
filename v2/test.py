@@ -8,7 +8,6 @@ from data.voc_tfds import TFDSVOC2007TestDataset
 from agents.localization_agent import LocalizationAgent
 from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
-from models.stdp import SQNSTDP
 
 from helpers.tester import test_model
 def main():
@@ -16,8 +15,8 @@ def main():
     
     # Core Parameters
     core_group = parser.add_argument_group('Core Parameters')
-    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
-    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv')
+    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats'], required=True)
+    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18', 'fusion'], default='conv')
     core_group.add_argument('--target', type=str, default='mixing')
     core_group.add_argument('--num-samples', type=int, default=10, help="Test on 10 samples by default")
     core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
@@ -47,11 +46,6 @@ def main():
     elif args.method == 'ats':
         model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
         model.is_snn = True # Set to SNN mode for evaluation
-    elif args.method == 'stdp':
-        if args.backbone == 'vgg16':
-            raise ValueError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
-        model = SQNSTDP(history_dim=history_dim)
-        model.set_pretrain_mode(False) # Ensure RL head is active
         
     model = model.to(device)
     
