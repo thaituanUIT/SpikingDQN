@@ -1,8 +1,6 @@
 import argparse
 import torch
 import os
-import sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 import cv2
 
@@ -22,8 +20,8 @@ def main():
     
     # Core Parameters
     core_group = parser.add_argument_group('Core Parameters')
-    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True)
-    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18'], default='conv')
+    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats'], required=True)
+    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18', 'fusion'], default='conv')
     core_group.add_argument('--target', type=str, default='mixing')
     core_group.add_argument('--image-path', type=str, default=None, help="Path to specific image file")
     core_group.add_argument('--num-images', type=int, default=5, help="Number of images if no path provided")
