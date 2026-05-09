@@ -1,12 +1,10 @@
 import argparse
 import torch
 import os
-import sys
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import numpy as np
 import csv
 
-from data.voc import VOCDataset
+from data.voc_tfds import TFDSVOC2007TestDataset
 from agents.localization_agent import LocalizationAgent
 from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
@@ -41,8 +39,7 @@ def main():
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
-    voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dataset')
-    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples, split="val")
+    dataset = TFDSVOC2007TestDataset(target_class=args.target, num_samples=args.num_samples)
     
     history_dim = 9 * args.replay
     if args.method == 'surrogate':
