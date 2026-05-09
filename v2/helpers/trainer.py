@@ -94,6 +94,8 @@ def train_stdp_pretraining(model, dataset, device, stdp_epochs=3, lr_decay=0.5):
     
     print("--- STDP Pre-training Complete ---\n")
 
+from torch.utils.data import WeightedRandomSampler
+
 def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20, target_update=1):
     """Standard DQN Training Loop"""
     epsilon = epsilon_start
@@ -109,13 +111,16 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
     # Ensure weights directory exists if saving
     if save_mode != "none":
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        
+    weights = dataset.get_sample_weights()
+    sampler = WeightedRandomSampler(weights, num_samples=len(dataset), replacement=True)
 
     for epoch in range(1, epochs + 1):
         print(f"\n--- Epoch {epoch}/{epochs} ---")
         epoch_loss = []
         epoch_reward = 0
         
-        for idx in range(len(dataset)):
+        for step_idx, idx in enumerate(sampler):
             sample = dataset[idx]
             image = sample['image']
             ground_truth = sample['box']
@@ -142,8 +147,8 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
                 
             epoch_reward += img_reward
             
-            if (idx + 1) % 10 == 0:
-                print(f"Image {idx+1}: Reward = {img_reward}, Steps = {step}")
+            if (step_idx + 1) % 10 == 0:
+                print(f"Image {step_idx+1}: Reward = {img_reward}, Steps = {step}")
         
         avg_loss = sum(epoch_loss) / len(epoch_loss) if epoch_loss else 0
         print(f"Epoch {epoch} Results: Avg Loss = {avg_loss:.4f}, Total Reward = {epoch_reward}, Epsilon = {epsilon:.2f}")
