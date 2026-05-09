@@ -53,6 +53,8 @@ def main():
     train_group.add_argument('--clip-grad', type=float, default=1.0, help="Gradient clipping norm")
     train_group.add_argument('--batch-size', type=int, default=20, help="Batch size for training")
     train_group.add_argument('--early-stop', type=int, default=0, help="Early stopping if no improvement for N epochs")
+    train_group.add_argument('--validation', type=str, choices=['none', 'loss', 'iou'], default='none', help="Validation metric to use for saving best model")
+    train_group.add_argument('--val-ratio', type=float, default=0.2, help="Ratio of validation samples when validation is enabled")
     
     # Logging and Saving
     log_group = parser.add_argument_group('Logging and Saving')
@@ -66,7 +68,17 @@ def main():
     
     # 1. Load Data
     voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dataset')
-    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples, use_random=args.random)
+    
+    val_dataset = None
+    if args.validation != 'none':
+        train_samples = int(args.num_samples * (1 - args.val_ratio)) if args.num_samples else None
+        val_samples = int(args.num_samples * args.val_ratio) if args.num_samples else None
+        
+        dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=train_samples, split='train', use_random=args.random)
+        val_dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=val_samples, split='val', use_random=args.random)
+        print(f"Validation enabled. Train samples: {len(dataset)}, Val samples: {len(val_dataset)}")
+    else:
+        dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples, split='train', use_random=args.random)
     
     if len(dataset) == 0:
         print("No valid samples found. Exiting.")
@@ -129,7 +141,9 @@ def main():
         save_mode=args.save,
         save_path=save_path,
         batch_size=args.batch_size,
-        target_update=args.target_update
+        target_update=args.target_update,
+        val_dataset=val_dataset,
+        validation_mode=args.validation
     )
     
     if args.logging:
