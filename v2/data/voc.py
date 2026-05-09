@@ -54,6 +54,7 @@ class VOCDataset(Dataset):
                 objects = [objects]
                 
             boxes = []
+            box_names = []
             for obj in objects:
                 obj_name = obj['name']
                 
@@ -65,20 +66,39 @@ class VOCDataset(Dataset):
                     ymax = int(float(bndbox['ymax']))
                     
                     boxes.append([xmin, ymin, xmax, ymax])
+                    box_names.append(obj_name)
                     
             if len(boxes) > 0:
                 areas = [(b[2]-b[0])*(b[3]-b[1]) for b in boxes]
-                largest_box = boxes[np.argmax(areas)]
+                max_idx = np.argmax(areas)
+                largest_box = boxes[max_idx]
+                largest_name = box_names[max_idx]
                 
                 filename = annotation['filename']
                 
                 self.samples.append({
                     'index': i,
                     'box': largest_box,
-                    'filename': filename
+                    'filename': filename,
+                    'class_name': largest_name
                 })
         
         print(f"Loaded {len(self.samples)} valid samples.")
+        
+        self.class_counts = {}
+        for s in self.samples:
+            cls = s['class_name']
+            self.class_counts[cls] = self.class_counts.get(cls, 0) + 1
+            
+        print("\n--- Class Distribution ---")
+        for cls, count in sorted(self.class_counts.items(), key=lambda x: x[1], reverse=True):
+            print(f"{cls}: {count}")
+        print("--------------------------\n")
+
+    def get_sample_weights(self):
+        """Returns sample weights inversely proportional to their class frequency."""
+        weights = [1.0 / self.class_counts[s['class_name']] for s in self.samples]
+        return weights
 
     def __len__(self):
         return len(self.samples)
