@@ -35,12 +35,12 @@ class VOCDataset(Dataset):
         print(f"Loading VOC dataset (Target: {self.target_class})...")
         
         # Determine which images to load. This can be refined to use ImageSets.
-        all_xmls = sorted(os.listdir(self.annotations_dir))
+        indices = list(range(len(self.voc)))
         
         # Only use a deterministic subset for randomness testing if not using exact splits
         if self.use_random:
             random.seed(42)
-            random.shuffle(all_xmls)
+            random.shuffle(indices)
 
         for i in indices:
             if num_samples is not None and len(self.samples) >= num_samples:

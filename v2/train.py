@@ -24,6 +24,7 @@ def main():
     core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18', 'fusion'], default='conv', help="Feature extractor backbone")
     core_group.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
     core_group.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
+    core_group.add_argument('--random', action='store_true', help="Random sample from dataset")
     core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     
     # RL/Agent Parameters
@@ -65,7 +66,7 @@ def main():
     
     # 1. Load Data
     voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dataset')
-    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples)
+    dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_samples, use_random=args.random)
     
     if len(dataset) == 0:
         print("No valid samples found. Exiting.")
