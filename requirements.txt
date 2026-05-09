@@ -5,3 +5,5 @@ matplotlib
 opencv-python
 xmltodict
 pandas
+tensorflow
+tensorflow-datasets
