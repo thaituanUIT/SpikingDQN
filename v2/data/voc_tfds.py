@@ -5,6 +5,12 @@ class TFDSVOC2007TestDataset:
         try:
             import tensorflow_datasets as tfds
             import tensorflow as tf
+            import os
+            
+            # Suppress verbose TF and TFDS output
+            os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+            tf.get_logger().setLevel('ERROR')
+            tfds.disable_progress_bar()
         except ImportError:
             raise ImportError("Please install tensorflow and tensorflow_datasets to use TFDSVOC2007TestDataset")
 
