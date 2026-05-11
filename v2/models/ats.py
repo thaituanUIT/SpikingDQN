@@ -48,7 +48,15 @@ class SQNConverted(nn.Module):
 
         # 3. Khởi tạo FC Layers một lần duy nhất
         self.fc = nn.Sequential(
-            nn.Linear(self.fc_input_dim, 1024),
+            nn.Linear(self.fc_input_dim, 5096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            
+            nn.Linear(5096, 2048),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            
+            nn.Linear(2048, 1024),
             nn.ReLU(inplace=True),
             nn.Dropout(0.2),
             

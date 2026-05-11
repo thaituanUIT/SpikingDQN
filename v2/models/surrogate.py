@@ -71,12 +71,18 @@ class SQNSurrogate(nn.Module):
 
         # 3. Khởi tạo FC Layers (Chia làm 3 khối cho vòng lặp Surrogate)
         self.fc1 = nn.Sequential(
-            nn.Linear(self.fc_input_dim, 1024),
+            nn.Linear(self.fc_input_dim, 5096),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            nn.Linear(5096, 2048),
             nn.ReLU(inplace=True),
             nn.Dropout(0.2)
         )
         
         self.fc2 = nn.Sequential(
+            nn.Linear(2048, 1024),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
             nn.Linear(1024, 512),
             nn.ReLU(inplace=True),
             nn.Dropout(0.2)
@@ -87,6 +93,7 @@ class SQNSurrogate(nn.Module):
             nn.ReLU(inplace=True),
             nn.Dropout(0.1),
             nn.Linear(128, 64),
+            nn.ReLU(inplace=True),
             final_layer
         )
 
@@ -110,7 +117,7 @@ class SQNSurrogate(nn.Module):
         pot_sum = torch.zeros(batch_size, self.output_dim, device=device)
 
         # 2. Spiking Temporal Loop
-        mem1 = torch.zeros(batch_size, 1024, device=device)
+        mem1 = torch.zeros(batch_size, 2048, device=device)
         mem2 = torch.zeros(batch_size, 512, device=device)
         mem3 = torch.zeros(batch_size, self.output_dim, device=device)
         
