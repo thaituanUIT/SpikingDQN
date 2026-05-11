@@ -41,7 +41,7 @@ Train an agent using the unified `train.py` script. The script automatically han
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--method` | string | (required) | SNN method to use: `surrogate` or `ats`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, or `fusion`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, `fusion`, `vit`, `efficientnet`, or `mobilenet`. |
 | `--target` | string | `mixing` | Target class (e.g., `aeroplane`) or `mixing` for all classes. |
 | `--num-samples`| int | `None` | Limit the number of samples loaded from VOC2012. |
 | `--random` | flag | `False` | Random sample from dataset. |
@@ -90,7 +90,7 @@ Test the saved agent policies using `test.py`. Evaluation is now strictly perfor
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--method` | string | (required) | SNN method to evaluate: `surrogate` or `ats`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, or `fusion`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, `fusion`, `vit`, `efficientnet`, or `mobilenet`. |
 | `--target` | string | `mixing` | Target class for evaluation. |
 | `--num-samples`| int | `10` | Number of samples to evaluate on from VOC2007 test. |
 | `--replay` | int | `10` | History size. |
@@ -118,7 +118,7 @@ Visualize the agent's search path (Blue bounds -> Red bounds) using the `render.
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--method` | string | (required) | SNN method to evaluate: `surrogate` or `ats`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, or `fusion`. |
+| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, `fusion`, `vit`, `efficientnet`, or `mobilenet`. |
 | `--target` | string | `mixing` | Target class for evaluation. |
 | `--image-path` | string | `None` | Path to specific image file to render. |
 | `--num-images`| int | `5` | Number of images to render if no path provided. |
