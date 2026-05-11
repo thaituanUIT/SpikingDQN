@@ -23,21 +23,30 @@ import cv2 as cv
 from torch.autograd import Variable
 
 from tqdm.notebook import tqdm
-from config import *
+# Removed config import since it's missing, will define inline
+# from config import *
+from collections import namedtuple
+Transition = namedtuple('Transition', ('state', 'action', 'next_state', 'reward'))
+criterion = nn.SmoothL1Loss()
+FloatTensor = torch.FloatTensor
+LongTensor = torch.LongTensor
+Tensor = torch.FloatTensor
 
 import glob
 from PIL import Image
 
 class Agent():
-    def __init__(self, classe, alpha=0.2, nu=3.0, threshold=0.35, num_episodes=15, load=False ):
+    def __init__(self, classe="mixing", alpha=0.1, nu=3.0, threshold=0.5, max_steps=20, load=False, device='cpu'):
         self.BATCH_SIZE = 100
         self.GAMMA = 0.900
         self.EPS = 1  #epsilon 
         self.TARGET_UPDATE = 1 
-        self.save_path = SAVE_MODEL_PATH
+        self.save_path = "./models/q_network"
         screen_height, screen_width = 224, 224
         self.n_actions = 9
         self.classe = classe
+        self.device = device
+        self.use_cuda = (str(self.device) != 'cpu')
 
         self.feature_extractor = FeatureExtractor()
         if not load:
@@ -49,7 +58,7 @@ class Agent():
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         self.feature_extractor.eval()
-        if use_cuda:
+        if self.use_cuda:
           self.feature_extractor = self.feature_extractor.cuda()
           self.target_net = self.target_net.cuda()
           self.policy_net = self.policy_net.cuda()
@@ -62,16 +71,19 @@ class Agent():
         self.alpha = alpha # €[0, 1]  Scaling factor
         self.nu = nu # Reward of Trigger
         self.threshold = threshold
+        self.max_steps = max_steps
+        self.history_size = 9
         self.actions_history = []
-        self.num_episodes = num_episodes
+        self.num_episodes = 15
         self.actions_history += [[100]*9]*20
+        self.model = self.policy_net  # For v2 interface compatibility
 
     def save_network(self):
         torch.save(self.policy_net, self.save_path+"_"+self.classe)
         print('Saved')
 
     def load_network(self):
-        if not use_cuda:
+        if not self.use_cuda:
             return torch.load(self.save_path+"_"+self.classe, map_location=torch.device('cpu'))
         return torch.load(self.save_path+"_"+self.classe)
 
@@ -144,7 +156,7 @@ class Agent():
         self.steps_done += 1
         if sample > eps_threshold:
             with torch.no_grad():
-                if use_cuda:
+                if self.use_cuda:
                     inpu = Variable(state).cuda()
                 else:
                     inpu = Variable(state)
@@ -160,7 +172,7 @@ class Agent():
 
     def select_action_model(self, state):
         with torch.no_grad():
-                if use_cuda:
+                if self.use_cuda:
                     inpu = Variable(state).cuda()
                 else:
                     inpu = Variable(state)
@@ -169,11 +181,112 @@ class Agent():
                 action = predicted[0] # + 1
                 return action
 
+    def update_target_network(self):
+        self.target_net.load_state_dict(self.policy_net.state_dict())
+
+    def train_step(self, batch_size=20):
+        self.BATCH_SIZE = batch_size
+        return self.optimize_model()
+
+    def step(self, image, history, current_mask, ground_truth, step_count, epsilon):
+        self.EPS = epsilon
+        
+        # Crop image and resize to 224x224
+        import cv2
+        x1, y1, x2, y2 = map(int, current_mask)
+        cropped_img = image[y1:y2, x1:x2]
+        if cropped_img.size == 0:
+            cropped_img = image
+            
+        cropped_img = cv2.resize(cropped_img, (224, 224))
+        img_transposed = np.transpose(cropped_img, (2, 0, 1))
+        img_tensor = torch.from_numpy(img_transposed).float() / 255.0
+        
+        # Reconstruct actions history for baseline API
+        self.actions_history = torch.zeros((9, 9))
+        size_h = sum([1 for h in history if h != -1])
+        valid_hist = [h for h in history if h != -1]
+        for i, h in enumerate(reversed(valid_hist)):
+            if i < 9:
+                self.actions_history[i][h] = 1
+                
+        state = self.compose_state(img_tensor, dtype=torch.FloatTensor)
+        if self.use_cuda:
+            state = state.cuda()
+        
+        if step_count >= self.max_steps:
+            action = 0 # Action 0 is trigger in baseline
+        else:
+            action = self.select_action(state, valid_hist, ground_truth)
+            
+        if action == 0:
+            new_mask = current_mask
+            reward = self.compute_trigger_reward(current_mask, ground_truth)
+            done = True
+        else:
+            self.actions_history = self.update_history(action)
+            new_mask = self.calculate_position_box_v2(action, current_mask)
+            reward = self.compute_reward(new_mask, current_mask, ground_truth)
+            done = False
+            
+        if done:
+            next_state = None
+        else:
+            nx1, ny1, nx2, ny2 = map(int, new_mask)
+            next_cropped = image[ny1:ny2, nx1:nx2]
+            if next_cropped.size == 0:
+                next_cropped = image
+            next_cropped = cv2.resize(next_cropped, (224, 224))
+            next_transposed = np.transpose(next_cropped, (2, 0, 1))
+            next_img_tensor = torch.from_numpy(next_transposed).float() / 255.0
+            next_state = self.compose_state(next_img_tensor, dtype=torch.FloatTensor)
+            if self.use_cuda:
+                next_state = next_state.cuda()
+            
+        self.memory.push(state.cpu(), int(action), next_state.cpu() if next_state is not None else None, reward)
+        
+        # Update history array
+        history = history[1:] + [action]
+        return new_mask, reward, done, history
+
+    def calculate_position_box_v2(self, action, current_mask):
+        alpha_w = self.alpha * (current_mask[2] - current_mask[0])
+        alpha_h = self.alpha * (current_mask[3] - current_mask[1])
+        real_x_min, real_y_min, real_x_max, real_y_max = current_mask
+        r = action
+        if r == 1:
+            real_x_min += alpha_w; real_x_max += alpha_w
+        elif r == 2:
+            real_x_min -= alpha_w; real_x_max -= alpha_w
+        elif r == 3:
+            real_y_min -= alpha_h; real_y_max -= alpha_h
+        elif r == 4:
+            real_y_min += alpha_h; real_y_max += alpha_h
+        elif r == 5:
+            real_y_min -= alpha_h; real_y_max += alpha_h
+            real_x_min -= alpha_w; real_x_max += alpha_w
+        elif r == 6:
+            real_y_min += alpha_h; real_y_max -= alpha_h
+            real_x_min += alpha_w; real_x_max -= alpha_w
+        elif r == 7:
+            real_y_min += alpha_h; real_y_max -= alpha_h
+        elif r == 8:
+            real_x_min += alpha_w; real_x_max -= alpha_w
+            
+        new_mask_tmp = np.array([real_x_min, real_y_min, real_x_max, real_y_max])
+        new_mask = np.array([
+            min(new_mask_tmp[0], new_mask_tmp[2]),
+            min(new_mask_tmp[1], new_mask_tmp[3]),
+            max(new_mask_tmp[0], new_mask_tmp[2]),
+            max(new_mask_tmp[1], new_mask_tmp[3])
+        ])
+        return new_mask
+
     def optimize_model(self):
  
 
         if len(self.memory) < self.BATCH_SIZE:
-            return
+            return 0.0
         transitions = self.memory.sample(self.BATCH_SIZE)
         batch = Transition(*zip(*transitions))
         
@@ -183,8 +296,9 @@ class Agent():
                                          volatile=True).type(Tensor)
         
         state_batch = Variable(torch.cat(batch.state)).type(Tensor)
-        if use_cuda:
+        if self.use_cuda:
             state_batch = state_batch.cuda()
+            non_final_next_states = non_final_next_states.cuda()
         action_batch = Variable(torch.LongTensor(batch.action).view(-1,1)).type(LongTensor)
         reward_batch = Variable(torch.FloatTensor(batch.reward).view(-1,1)).type(Tensor)
 
@@ -192,8 +306,10 @@ class Agent():
 
         next_state_values = Variable(torch.zeros(self.BATCH_SIZE, 1).type(Tensor)) 
 
-        if use_cuda:
-            non_final_next_states = non_final_next_states.cuda()
+        if self.use_cuda:
+            next_state_values = next_state_values.cuda()
+            action_batch = action_batch.cuda()
+            reward_batch = reward_batch.cuda()
         
         d = self.target_net(non_final_next_states) 
         next_state_values[non_final_mask] = d.max(1)[0].view(-1,1)
@@ -207,6 +323,8 @@ class Agent():
         loss.backward()
         self.optimizer.step()
         
+        return loss.item()
+        
     
     def compose_state(self, image, dtype=FloatTensor):
         image_feature = self.get_features(image, dtype)
@@ -216,10 +334,9 @@ class Agent():
         return state
     
     def get_features(self, image, dtype=FloatTensor):
-        global transform
         image = image.view(1,*image.shape)
         image = Variable(image).type(dtype)
-        if use_cuda:
+        if self.use_cuda:
             image = image.cuda()
         feature = self.feature_extractor(image)
         return feature.data

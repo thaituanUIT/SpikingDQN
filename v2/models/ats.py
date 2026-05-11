@@ -3,7 +3,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
-from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone
+from backbone.model import (
+    VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone,
+    ViTBackbone, EfficientNetBackbone, MobileNetBackbone
+)
 
 class SQNConverted(nn.Module):
     def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, backbone_name='conv', dueling=False):
@@ -24,6 +27,12 @@ class SQNConverted(nn.Module):
             self.backbone = ResNetBackbone(model_name='resnet18')
         elif self.backbone_name == 'fusion':
             self.backbone = FusionBackbone(model_name='resnet18')
+        elif self.backbone_name == 'vit':
+            self.backbone = ViTBackbone(model_name='vit_b_16')
+        elif self.backbone_name == 'efficientnet':
+            self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
+        elif self.backbone_name == 'mobilenet':
+            self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
             self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
             
@@ -66,7 +75,7 @@ class SQNConverted(nn.Module):
             
             # ATS conversion normally skips VGG/ResNet and only applies to the trained RL head
             # Or we can treat pre-trained output as a constant current.
-            if self.backbone_name in ['vgg16', 'resnet18', 'fusion']:
+            if self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                 with torch.no_grad():
                     constant_features = self.backbone(state)
             
@@ -77,7 +86,7 @@ class SQNConverted(nn.Module):
             for t in range(self.simulation_time):
                 x_in = state
                 
-                if self.backbone_name in ['vgg16', 'resnet18', 'fusion']:
+                if self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                     features = constant_features
                 else:
                     # Manual pass through layers to track membrane potentials

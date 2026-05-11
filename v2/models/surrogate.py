@@ -2,7 +2,10 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
-from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone
+from backbone.model import (
+    VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone,
+    ViTBackbone, EfficientNetBackbone, MobileNetBackbone
+)
 
 class SuperSpike(torch.autograd.Function):
     """
@@ -48,6 +51,12 @@ class SQNSurrogate(nn.Module):
             self.backbone = ResNetBackbone(model_name='resnet18')
         elif self.backbone_name == 'fusion':
             self.backbone = FusionBackbone(model_name='resnet18')
+        elif self.backbone_name == 'vit':
+            self.backbone = ViTBackbone(model_name='vit_b_16')
+        elif self.backbone_name == 'efficientnet':
+            self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
+        elif self.backbone_name == 'mobilenet':
+            self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
             self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
             

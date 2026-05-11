@@ -161,3 +161,86 @@ class FusionBackbone(FeatureExtractor):
         # This backbone has multiple parallel branches conceptually, 
         # but returning a sequential list of the main path for now.
         return nn.Sequential(self.stem, self.layer1, self.layer2, self.layer3, self.layer4)
+
+class EfficientNetBackbone(FeatureExtractor):
+    def __init__(self, model_name='efficientnet_b0', pretrained=True, freeze=True):
+        super(EfficientNetBackbone, self).__init__()
+        effnet = getattr(models, model_name)(pretrained=pretrained)
+        self.features = effnet.features
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        
+        if freeze:
+            for param in self.features.parameters():
+                param.requires_grad = False
+                
+        # Determine output dim
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, 224, 224)
+            out = self.pool(self.features(dummy))
+            self.output_dim = out.reshape(1, -1).size(1)
+            
+        self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    def _extract(self, x):
+        x = self.features(x)
+        x = self.pool(x)
+        return x.reshape(x.size(0), -1)
+
+    def get_layers(self):
+        return self.features
+
+class MobileNetBackbone(FeatureExtractor):
+    def __init__(self, model_name='mobilenet_v3_small', pretrained=True, freeze=True):
+        super(MobileNetBackbone, self).__init__()
+        mobilenet = getattr(models, model_name)(pretrained=pretrained)
+        self.features = mobilenet.features
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        
+        if freeze:
+            for param in self.features.parameters():
+                param.requires_grad = False
+                
+        # Determine output dim
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, 224, 224)
+            out = self.pool(self.features(dummy))
+            self.output_dim = out.reshape(1, -1).size(1)
+            
+        self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    def _extract(self, x):
+        x = self.features(x)
+        x = self.pool(x)
+        return x.reshape(x.size(0), -1)
+
+    def get_layers(self):
+        return self.features
+
+class ViTBackbone(FeatureExtractor):
+    def __init__(self, model_name='vit_b_16', pretrained=True, freeze=True):
+        super(ViTBackbone, self).__init__()
+        vit = getattr(models, model_name)(pretrained=pretrained)
+        
+        # Replace the final classification head to output the class token features
+        vit.heads = nn.Identity()
+        self.features = vit
+        
+        if freeze:
+            for param in self.features.parameters():
+                param.requires_grad = False
+                
+        # Determine output dim
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, 224, 224)
+            out = self.features(dummy)
+            self.output_dim = out.reshape(1, -1).size(1)
+            
+        self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+
+    def _extract(self, x):
+        x = self.features(x)
+        return x.reshape(x.size(0), -1)
+
+    def get_layers(self):
+        # ViT is a monolithic transformer encoder, so we return the whole network
+        return self.features
