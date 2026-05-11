@@ -16,7 +16,7 @@ def main():
     # Core Parameters
     core_group = parser.add_argument_group('Core Parameters')
     core_group.add_argument('--method', type=str, choices=['surrogate', 'ats'], required=True)
-    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18', 'fusion'], default='conv')
+    core_group.add_argument('--backbone', type=str, choices=['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet'], default='conv')
     core_group.add_argument('--target', type=str, default='mixing')
     core_group.add_argument('--num-samples', type=int, default=10, help="Test on 10 samples by default")
     core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
