@@ -84,7 +84,7 @@ class LocalizationAgent:
             # Pick the best available guided action (as long as it's not a severe penalty)
             max_reward = np.max(rewards)
             
-            if max_reward > -0.5:
+            if max_reward >= 0.0:
                 positive_idx = np.where(np.array(rewards) == max_reward)[0]
                 action = random.choice(positive_idx)
             else:
@@ -142,25 +142,24 @@ class LocalizationAgent:
         iou_new = self.compute_iou(new_mask, ground_truth)
         iou_current = self.compute_iou(current_mask, ground_truth)
 
-        # Step penalty prevents "too much steps"
-        step_penalty = -0.1
-
+        # Strictly integer-based rewards
         if iou_new > iou_current:
             # Strict logic: Agent ONLY gets positive reward if it matches ground truth (> threshold)
             if iou_new >= self.threshold:
-                return 1.0 + step_penalty
+                return 1.0
             else:
-                return 0.0 + step_penalty
+                return 0.0
         else:
-            return -1.0 + step_penalty
+            return -1.0
 
     def compute_finish_reward(self, current_mask, ground_truth):
         iou = self.compute_iou(current_mask, ground_truth)
         if iou >= self.threshold:
-            # Exponential scaling forces the agent to find the BEST IoU rather than stopping lazily
-            return self.nu * (iou ** 2) * 2.0
+            # Scale the exponential IoU up to allow meaningful integers, then strictly round down
+            reward = self.nu * (iou ** 2) * 10.0
+            return float(int(reward))
         else:
-            return -self.nu
+            return -float(int(self.nu))
 
     def feature_extract(self, img, history, width, height, current_mask):
         """Converts mask to cropped image tensor and history list to tensor"""
