@@ -116,7 +116,11 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
     weights = dataset.get_sample_weights()
     sampler = WeightedRandomSampler(weights, num_samples=len(dataset), replacement=True)
 
+    global_step = 0
+    target_update_frequency = 2000 # Update target net every 2000 steps
+
     for epoch in range(1, epochs + 1):
+        agent.model.train() # CRITICAL: Restore train mode after validation
         print(f"\n--- Epoch {epoch}/{epochs} ---")
         epoch_loss = []
         epoch_reward = 0
@@ -145,6 +149,11 @@ def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, 
                     
                 img_reward += reward
                 step += 1
+                global_step += 1
+                
+                # Frequent target updates stabilize Q-values for large backbones
+                if global_step % target_update_frequency == 0:
+                    agent.update_target_network()
                 
             epoch_reward += img_reward
             

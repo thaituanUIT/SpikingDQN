@@ -33,7 +33,7 @@ class LocalizationAgent:
         self.action_options = action_options
         self.history_size = history_size
         
-        self.memory = ReplayBuffer(capacity=1000)
+        self.memory = ReplayBuffer(capacity=10000)
         
         # Loss function selection
         if loss_fn == 'mse':
@@ -72,21 +72,8 @@ class LocalizationAgent:
             self.model.train()
             action = torch.argmax(q_values).item()
         else:
-            # Random action exploration guided by positive reward
-            rewards = []
-            for i in range(self.action_options):
-                if i == 8:
-                    reward = self.compute_finish_reward(current_mask, ground_truth)
-                else:
-                    reward = self.compute_reward(i, current_mask, ground_truth)
-                rewards.append(reward)
-                
-            positive_idx = np.where(np.array(rewards) > 0)[0]
-            
-            if len(positive_idx) == 0:
-                action = random.choice(range(self.action_options))
-            else:
-                action = random.choice(positive_idx)
+            # Standard unguided random exploration
+            action = random.choice(range(self.action_options))
         return action
 
     def compute_mask(self, action, current_mask):
@@ -144,8 +131,11 @@ class LocalizationAgent:
         return 1 if iou_new > iou_current else -1
 
     def compute_finish_reward(self, current_mask, ground_truth):
-        # +nu if terminated with IoU > threshold, else -nu
-        return self.nu if self.compute_iou(current_mask, ground_truth) > self.threshold else -self.nu
+        iou = self.compute_iou(current_mask, ground_truth)
+        if iou > self.threshold:
+            return self.nu * iou
+        else:
+            return -self.nu
 
     def feature_extract(self, img, history, width, height, current_mask):
         """Converts mask to cropped image tensor and history list to tensor"""

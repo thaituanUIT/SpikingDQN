@@ -136,7 +136,9 @@ def main():
     print(f"Starting RL Loop using {args.method} mechanism with {args.algo.upper()}...")
     save_path = f"weights/{args.method}_{args.target}.pth"
     losses, epsilons = run_rl_training(
-        agent, dataset, epochs=args.epochs, 
+        agent=agent,
+        dataset=dataset,
+        epochs=args.epochs,
         early_stop_patience=args.early_stop,
         save_mode=args.save,
         save_path=save_path,
@@ -146,25 +148,11 @@ def main():
         validation_mode=args.validation
     )
     
-    if args.logging:
-        plot_training_results(losses, epsilons, args.method, args.target)
-    
-    # 6. ATS Conversion (if applicable)
     if args.method == 'ats':
         print("\n--- Converting ANN to SNN ---")
-        model.convert_to_snn()
-
-    # 7. Save Weights
-    if args.save == "last":
-        os.makedirs('weights', exist_ok=True)
-        torch.save(model.state_dict(), save_path)
-        print(f"Final model saved to {save_path}")
-    elif args.save == "best":
-        print(f"Best model was saved to {save_path}")
-    elif args.save == "epoch":
-        print(f"Epoch models were saved in weights directory.")
-    else:
-        print("Model saving skipped (none).")
+        model.convert_to_snn(dataloader=None)
+        
+    print(f"Best model was saved to {save_path}")
 
 if __name__ == '__main__':
     main()

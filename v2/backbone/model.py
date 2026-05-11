@@ -30,16 +30,18 @@ class VGG16Backbone(FeatureExtractor):
         super(VGG16Backbone, self).__init__()
         vgg16 = models.vgg16(pretrained=pretrained)
         self.features = vgg16.features
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
         
         if freeze:
             for param in self.features.parameters():
                 param.requires_grad = False
                 
-        self.output_dim = 25088 # 7*7*512
+        self.output_dim = 512
         self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     def _extract(self, x):
         x = self.features(x)
+        x = self.pool(x)
         return x.reshape(x.size(0), -1)
 
     def get_layers(self):
@@ -51,6 +53,7 @@ class ResNetBackbone(FeatureExtractor):
         resnet = getattr(models, model_name)(pretrained=pretrained)
         # Remove the fully connected layer and the global average pooling
         self.features = nn.Sequential(*(list(resnet.children())[:-2]))
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
         
         if freeze:
             for param in self.features.parameters():
@@ -59,13 +62,14 @@ class ResNetBackbone(FeatureExtractor):
         # Determine output dim by a dummy pass
         with torch.no_grad():
             dummy = torch.zeros(1, 3, 224, 224)
-            out = self.features(dummy)
+            out = self.pool(self.features(dummy))
             self.output_dim = out.reshape(1, -1).size(1)
             
         self.normalize = T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     def _extract(self, x):
         x = self.features(x)
+        x = self.pool(x)
         return x.reshape(x.size(0), -1)
 
     def get_layers(self):
@@ -123,7 +127,7 @@ class FusionBackbone(FeatureExtractor):
         self.layer3 = resnet.layer3
         self.layer4 = resnet.layer4 # Deep features
         
-        self.pool = nn.AdaptiveAvgPool2d((7, 7))
+        self.pool = nn.AdaptiveAvgPool2d((1, 1))
         
         if freeze:
             for param in self.parameters():

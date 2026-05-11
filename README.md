@@ -4,6 +4,10 @@ This repository explores the intersection of Reinforcement Learning (RL) and Spi
 
 By formulating object localization as a Markov Decision Process (MDP), our RL agent learns to sequentially adjust a bounding box—moving, scaling, and altering its aspect ratio—until it accurately encapsulates the target object. The agent's policy and value networks are powered by Spiking Neural Networks, leveraging their innate temporal dynamics and efficiency.
 
+## Project Status
+
+**Active & Stable**: The project is under active development. The `v2` codebase has been fully stabilized, effectively addressing catastrophic forgetting during RL training with deep feature extractors (e.g., VGG16, ResNet18) using Global Average Pooling. The agent's reward structure has been optimized to prevent local optima, and the SNN conversion (`ats`) and simulation logic are functionally complete and ready for full-scale experiments.
+
 ## Repository Structure
 
 The project has evolved through several iterations. Researchers should focus their efforts on `v2` for the most modular and up-to-date PyTorch implementation.

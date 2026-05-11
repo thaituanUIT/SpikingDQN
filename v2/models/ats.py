@@ -75,8 +75,6 @@ class SQNConverted(nn.Module):
             q_values = self.fc(x)
             return q_values
         else:
-            if self.dueling:
-                raise NotImplementedError("Dueling Architecture is not currently supported in the manual ATS SNN conversion loop.")
             
             # SNN Forward pass (Integrate and Fire simulation)
             state_size = state.size(0)
@@ -117,9 +115,15 @@ class SQNConverted(nn.Module):
                     
                 x_in = torch.cat([features, history], dim=1)
                 
+                if self.dueling:
+                    from backbone.engine import DuelingHead
+                    valid_layers = (nn.Linear, DuelingHead)
+                else:
+                    valid_layers = (nn.Linear,)
+
                 f_idx = 0
                 for layer in self.fc:
-                    if isinstance(layer, nn.Linear):
+                    if isinstance(layer, valid_layers):
                         x_in = layer(x_in)
                     elif isinstance(layer, nn.ReLU):
                         if f_idx not in mem_fc:
