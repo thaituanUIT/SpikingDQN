@@ -56,10 +56,18 @@ class SQNConverted(nn.Module):
                 nn.Linear(256, self.output_dim)
             )
 
+    def extract_features(self, state):
+        """Extracts CNN features, bypassing SNN and FC layers."""
+        with torch.no_grad():
+            return self.backbone(state)
+
     def forward(self, state, history):
         if not self.is_snn:
             # Standard ANN Forward pass
-            features = self.backbone(state)
+            if state.dim() == 2:
+                features = state
+            else:
+                features = self.backbone(state)
                 
             x = torch.cat([features, history], dim=1)
             q_values = self.fc(x)
@@ -76,8 +84,11 @@ class SQNConverted(nn.Module):
             # ATS conversion normally skips VGG/ResNet and only applies to the trained RL head
             # Or we can treat pre-trained output as a constant current.
             if self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
-                with torch.no_grad():
-                    constant_features = self.backbone(state)
+                if state.dim() == 2:
+                    constant_features = state
+                else:
+                    with torch.no_grad():
+                        constant_features = self.backbone(state)
             
             mem_conv = {}
             mem_fc = {}
