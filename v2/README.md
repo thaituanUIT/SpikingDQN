@@ -15,7 +15,7 @@ The reinforcement learning environment frames object localization as a Markov De
 8. Decrease Horizontal Aspect Ratio (Taller)
 9. **Trigger/Terminate** (Indicates the object is found)
 
-The agent receives a positive reward (+1) if the Intersection Over Union (IoU) with the ground truth improves, and a termination bonus (+3) if it halts with an IoU > 0.5.
+The agent receives a positive reward (+1) if the Intersection Over Union (IoU) with the ground truth improves. To prevent "lazy" premature terminations, the trigger action grants a proportional termination bonus (`nu * iou`, e.g. up to +3.0) if it halts with an IoU > 0.5, heavily incentivizing the agent to perfectly frame the object.
 
 ## Available Methods
 
@@ -26,11 +26,11 @@ The framework supports two interchangeable SNN architectures:
 2. **ATS (`--method ats`)**: 
    ANN-To-SNN conversion. Pre-trains the RL agent as a standard Convolutional Neural Network with ReLUs, and discretizes the weights logically into Integrate-and-Fire neurons for inference/evaluation.
 
-## VGG16 Backbone Support
+## Deep Backbone Support & GAP Stabilization
 
 By default, the `surrogate` and `ats` methods use a shallow, built-in Convolutional Neural Network layer stack to extract spatial features directly from the raw pixels. 
 
-To improve convergence and feature abstraction during Reinforcement Learning, researchers can inject a frozen **VGG16 (`--backbone vgg16`)** model to extract 25,088 features from the image before feeding it directly into the Spiking fully-connected layers.
+To improve convergence and feature abstraction, researchers can inject frozen deep backbones (e.g., `--backbone vgg16`, `resnet18`, `efficientnet`). To prevent catastrophic forgetting and RL instability from massive feature outputs, a **Global Average Pooling (GAP)** layer is applied. For example, this reduces VGG16's output from an unmanageable 25,088 features down to a highly stable 512 dimensions before entering the Spiking fully-connected head.
 
 ## Training Usage
 
