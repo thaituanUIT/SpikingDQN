@@ -3,7 +3,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
-from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone
+from backbone.model import (
+    VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone,
+    ViTBackbone, EfficientNetBackbone, MobileNetBackbone
+)
 
 class SQNConverted(nn.Module):
     def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, backbone_name='conv', dueling=False):
@@ -18,42 +21,50 @@ class SQNConverted(nn.Module):
         
         self.is_snn = False # Flag indicating if it has been converted
         
+        # 1. Khởi tạo Backbone
         if self.backbone_name == 'vgg16':
             self.backbone = VGG16Backbone()
         elif self.backbone_name == 'resnet18':
             self.backbone = ResNetBackbone(model_name='resnet18')
         elif self.backbone_name == 'fusion':
             self.backbone = FusionBackbone(model_name='resnet18')
+        elif self.backbone_name == 'vit':
+            self.backbone = ViTBackbone(model_name='vit_b_16')
+        elif self.backbone_name == 'efficientnet':
+            self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
+        elif self.backbone_name == 'mobilenet':
+            self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
             self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
             
         self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
-        self.dropout = nn.Dropout
-
-        fc_layers = []
-        fc_layers.append(nn.Linear(self.fc_input_dim, 1024))
-        fc_layers.append(nn.ReLU(inplace=True))
-        fc_layers.append(self.dropout(0.2))
-        
-        fc_layers.append(nn.Linear(1024, 512))
-        fc_layers.append(nn.ReLU(inplace=True))
-        fc_layers.append(self.dropout(0.2))
-        
-        fc_layers.append(nn.Linear(512, 128))
-        fc_layers.append(nn.ReLU(inplace=True))
-        fc_layers.append(self.dropout(0.1))
-        
-        fc_layers.append(nn.Linear(128, 64))
-        fc_layers.append(nn.ReLU(inplace=True))
-        
+        # 2. Xác định Final Layer trước
         if self.dueling:
             from backbone.engine import DuelingHead
-            fc_layers.append(DuelingHead(64, 32, self.output_dim))
+            final_layer = DuelingHead(64, 32, self.output_dim)
         else:
-            fc_layers.append(nn.Linear(64, self.output_dim))
-        
-        self.fc = nn.Sequential(*fc_layers)
+            final_layer = nn.Linear(64, self.output_dim)
+
+        # 3. Khởi tạo FC Layers một lần duy nhất
+        self.fc = nn.Sequential(
+            nn.Linear(self.fc_input_dim, 1024),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            
+            nn.Linear(1024, 512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2),
+            
+            nn.Linear(512, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            
+            nn.Linear(128, 64),
+            nn.ReLU(inplace=True),
+            
+            final_layer
+        )
 
     def forward(self, state, history):
         if not self.is_snn:
@@ -66,15 +77,15 @@ class SQNConverted(nn.Module):
         else:
             if self.dueling:
                 raise NotImplementedError("Dueling Architecture is not currently supported in the manual ATS SNN conversion loop.")
+            
             # SNN Forward pass (Integrate and Fire simulation)
             state_size = state.size(0)
             device = state.device
             
             out_v = torch.zeros(state_size, self.output_dim, device=device)
             
-            # ATS conversion normally skips VGG/ResNet and only applies to the trained RL head
-            # Or we can treat pre-trained output as a constant current.
-            if self.backbone_name in ['vgg16', 'resnet18', 'fusion']:
+            # ATS conversion normally skips Backbone and applies to the trained RL head
+            if self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                 with torch.no_grad():
                     constant_features = self.backbone(state)
             
@@ -85,7 +96,7 @@ class SQNConverted(nn.Module):
             for t in range(self.simulation_time):
                 x_in = state
                 
-                if self.backbone_name in ['vgg16', 'resnet18', 'fusion']:
+                if self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                     features = constant_features
                 else:
                     # Manual pass through layers to track membrane potentials
@@ -118,6 +129,10 @@ class SQNConverted(nn.Module):
                         mem_fc[f_idx] -= spikes
                         x_in = spikes
                         f_idx += 1
+                    # Lưu ý: Các lớp nn.Dropout trong SNN sẽ tự động bị bỏ qua (bypass) 
+                    # vì trong vòng lặp này chúng ta không xử lý instance của nn.Dropout. 
+                    # Điều này là CHÍNH XÁC vì khi inference SNN (is_snn=True), hàm eval() 
+                    # cũng khiến Dropout không có tác dụng.
                 
                 out_v += x_in # Last layer is Linear (no ReLU), acts as voltage accumulator
 
