@@ -21,7 +21,7 @@ def main():
     # Core Parameters
     core_group = parser.add_argument_group('Core Parameters')
     core_group.add_argument('--method', type=str, choices=['surrogate', 'ats'], required=True, help="SNN method to use")
-    core_group.add_argument('--backbone', type=str, choices=['conv', 'vgg16', 'resnet18', 'fusion'], default='conv', help="Feature extractor backbone")
+    core_group.add_argument('--backbone', type=str, choices=['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet'], default='conv', help="Feature extractor backbone")
     core_group.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
     core_group.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
     core_group.add_argument('--random', action='store_true', help="Random sample from dataset")
