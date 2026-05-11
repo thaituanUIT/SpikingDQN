@@ -33,6 +33,7 @@ To ensure stable and efficient Reinforcement Learning, the `v2` architecture inc
 * **Deep Backbone Support & GAP Stabilization**: Researchers can inject frozen deep backbones (`vgg16`, `resnet18`, `efficientnet`, etc.). A **Global Average Pooling (GAP)** layer compresses massive feature outputs (e.g., 25,088 features) down to a highly stable 512 dimensions, preventing catastrophic forgetting and the "Epoch 1 Cliff".
 * **Replay Buffer Feature Caching**: Instead of storing massive 3D image arrays in memory, the environment step pre-extracts the 1D feature tensors using the frozen backbone. The replay buffer strictly stores these lightweight vectors, bypassing the backbone entirely during DQN backpropagation. This drastically reduces VRAM usage and accelerates training time.
 * **Guided Exploration**: The standard epsilon-greedy policy is augmented with a positive-reward lookahead. During random exploration, the agent strategically prioritizes actions that guarantee an immediate positive reward (IoU improvement), avoiding destructive bounding box transformations and massively speeding up early convergence.
+* **Deep Spiking RL Head**: The fully connected decision network has been expanded into a robust 6-layer deep sequence (`5096 -> 2048 -> 1024 -> 512 -> 128 -> 64 -> output`). In the `surrogate` method, these layers are systematically partitioned across the temporal spiking loop to maintain biological plausibility while processing highly complex spatial abstractions.
 
 ## Training Usage
 
