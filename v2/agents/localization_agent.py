@@ -81,12 +81,14 @@ class LocalizationAgent:
                     reward = self.compute_reward(i, current_mask, ground_truth)
                 rewards.append(reward)
                 
-            positive_idx = np.where(np.array(rewards) > 0)[0]
+            # Pick the best available guided action (as long as it's not a severe penalty)
+            max_reward = np.max(rewards)
             
-            if len(positive_idx) == 0:
-                action = random.choice(range(self.action_options))
-            else:
+            if max_reward > -0.5:
+                positive_idx = np.where(np.array(rewards) == max_reward)[0]
                 action = random.choice(positive_idx)
+            else:
+                action = random.choice(range(self.action_options))
         return action
 
     def compute_mask(self, action, current_mask):
@@ -140,13 +142,23 @@ class LocalizationAgent:
         iou_new = self.compute_iou(new_mask, ground_truth)
         iou_current = self.compute_iou(current_mask, ground_truth)
 
-        # Basic reward structure: positive if IoU improves
-        return 1 if iou_new > iou_current else -1
+        # Step penalty prevents "too much steps"
+        step_penalty = -0.1
+
+        if iou_new > iou_current:
+            # Strict logic: Agent ONLY gets positive reward if it matches ground truth (> threshold)
+            if iou_new >= self.threshold:
+                return 1.0 + step_penalty
+            else:
+                return 0.0 + step_penalty
+        else:
+            return -1.0 + step_penalty
 
     def compute_finish_reward(self, current_mask, ground_truth):
         iou = self.compute_iou(current_mask, ground_truth)
-        if iou > self.threshold:
-            return self.nu * iou
+        if iou >= self.threshold:
+            # Exponential scaling forces the agent to find the BEST IoU rather than stopping lazily
+            return self.nu * (iou ** 2) * 2.0
         else:
             return -self.nu
 
