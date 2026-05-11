@@ -2,7 +2,10 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
-from backbone.model import VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone
+from backbone.model import (
+    VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone,
+    ViTBackbone, EfficientNetBackbone, MobileNetBackbone
+)
 
 class SuperSpike(torch.autograd.Function):
     """
@@ -36,50 +39,56 @@ class SQNSurrogate(nn.Module):
         self.backbone_name = backbone_name
         self.dueling = dueling
 
-        
         self.alpha = alpha
         self.beta = beta
         self.threshold = threshold
         self.spike_fn = SuperSpike.apply
 
+        # 1. Khởi tạo Backbone
         if self.backbone_name == 'vgg16':
             self.backbone = VGG16Backbone()
         elif self.backbone_name == 'resnet18':
             self.backbone = ResNetBackbone(model_name='resnet18')
         elif self.backbone_name == 'fusion':
             self.backbone = FusionBackbone(model_name='resnet18')
+        elif self.backbone_name == 'vit':
+            self.backbone = ViTBackbone(model_name='vit_b_16')
+        elif self.backbone_name == 'efficientnet':
+            self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
+        elif self.backbone_name == 'mobilenet':
+            self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
             self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
             
         self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
-        self.dropout = nn.Dropout
-
-        fc_layers = []
-        fc_layers.append(nn.Linear(self.fc_input_dim, 1024))
-        fc_layers.append(nn.ReLU(inplace=True))
-        fc_layers.append(self.dropout(0.2))
-        self.fc1 = nn.Sequential(*fc_layers)
-        
-        fc_layers = []
-        fc_layers.append(nn.Linear(1024, 512))
-        fc_layers.append(nn.ReLU(inplace=True))
-        fc_layers.append(self.dropout(0.2))
-        self.fc2 = nn.Sequential(*fc_layers)
-        
-        fc_layers = []
-        fc_layers.append(nn.Linear(512, 128))
-        fc_layers.append(nn.ReLU(inplace=True))
-        fc_layers.append(self.dropout(0.1))
-        fc_layers.append(nn.Linear(128, 64))
-        
+        # 2. Xác định Final Layer cho FC3
         if self.dueling:
             from backbone.engine import DuelingHead
-            fc_layers.append(DuelingHead(64, 32, self.output_dim))
+            final_layer = DuelingHead(64, 32, self.output_dim)
         else:
-            fc_layers.append(nn.Linear(64, self.output_dim))
+            final_layer = nn.Linear(64, self.output_dim)
+
+        # 3. Khởi tạo FC Layers (Chia làm 3 khối cho vòng lặp Surrogate)
+        self.fc1 = nn.Sequential(
+            nn.Linear(self.fc_input_dim, 1024),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2)
+        )
         
-        self.fc3 = nn.Sequential(*fc_layers)
+        self.fc2 = nn.Sequential(
+            nn.Linear(1024, 512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.2)
+        )
+        
+        self.fc3 = nn.Sequential(
+            nn.Linear(512, 128),
+            nn.ReLU(inplace=True),
+            nn.Dropout(0.1),
+            nn.Linear(128, 64),
+            final_layer
+        )
 
     def forward(self, state, history):
         batch_size = state.size(0)
