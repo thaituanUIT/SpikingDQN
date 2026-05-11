@@ -66,10 +66,18 @@ class SQNConverted(nn.Module):
             final_layer
         )
 
+    def extract_features(self, state):
+        """Extracts CNN features, bypassing SNN and FC layers."""
+        with torch.no_grad():
+            return self.backbone(state)
+
     def forward(self, state, history):
         if not self.is_snn:
             # Standard ANN Forward pass
-            features = self.backbone(state)
+            if state.dim() == 2:
+                features = state
+            else:
+                features = self.backbone(state)
                 
             x = torch.cat([features, history], dim=1)
             q_values = self.fc(x)
@@ -83,7 +91,9 @@ class SQNConverted(nn.Module):
             out_v = torch.zeros(state_size, self.output_dim, device=device)
             
             # ATS conversion normally skips Backbone and applies to the trained RL head
-            if self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
+            if state.dim() == 2:
+                constant_features = state
+            elif self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                 with torch.no_grad():
                     constant_features = self.backbone(state)
             
@@ -94,7 +104,7 @@ class SQNConverted(nn.Module):
             for t in range(self.simulation_time):
                 x_in = state
                 
-                if self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
+                if state.dim() == 2 or self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                     features = constant_features
                 else:
                     # Manual pass through layers to track membrane potentials

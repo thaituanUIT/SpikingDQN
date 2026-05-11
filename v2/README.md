@@ -26,11 +26,13 @@ The framework supports two interchangeable SNN architectures:
 2. **ATS (`--method ats`)**: 
    ANN-To-SNN conversion. Pre-trains the RL agent as a standard Convolutional Neural Network with ReLUs, and discretizes the weights logically into Integrate-and-Fire neurons for inference/evaluation.
 
-## Deep Backbone Support & GAP Stabilization
+## Architectural Optimizations
 
-By default, the `surrogate` and `ats` methods use a shallow, built-in Convolutional Neural Network layer stack to extract spatial features directly from the raw pixels. 
+To ensure stable and efficient Reinforcement Learning, the `v2` architecture incorporates several advanced optimizations:
 
-To improve convergence and feature abstraction, researchers can inject frozen deep backbones (e.g., `--backbone vgg16`, `resnet18`, `efficientnet`). To prevent catastrophic forgetting and RL instability from massive feature outputs, a **Global Average Pooling (GAP)** layer is applied. For example, this reduces VGG16's output from an unmanageable 25,088 features down to a highly stable 512 dimensions before entering the Spiking fully-connected head.
+* **Deep Backbone Support & GAP Stabilization**: Researchers can inject frozen deep backbones (`vgg16`, `resnet18`, `efficientnet`, etc.). A **Global Average Pooling (GAP)** layer compresses massive feature outputs (e.g., 25,088 features) down to a highly stable 512 dimensions, preventing catastrophic forgetting and the "Epoch 1 Cliff".
+* **Replay Buffer Feature Caching**: Instead of storing massive 3D image arrays in memory, the environment step pre-extracts the 1D feature tensors using the frozen backbone. The replay buffer strictly stores these lightweight vectors, bypassing the backbone entirely during DQN backpropagation. This drastically reduces VRAM usage and accelerates training time.
+* **Guided Exploration**: The standard epsilon-greedy policy is augmented with a positive-reward lookahead. During random exploration, the agent strategically prioritizes actions that guarantee an immediate positive reward (IoU improvement), avoiding destructive bounding box transformations and massively speeding up early convergence.
 
 ## Training Usage
 

@@ -72,8 +72,21 @@ class LocalizationAgent:
             self.model.train()
             action = torch.argmax(q_values).item()
         else:
-            # Standard unguided random exploration
-            action = random.choice(range(self.action_options))
+            # Random action exploration guided by positive reward
+            rewards = []
+            for i in range(self.action_options):
+                if i == 8:
+                    reward = self.compute_finish_reward(current_mask, ground_truth)
+                else:
+                    reward = self.compute_reward(i, current_mask, ground_truth)
+                rewards.append(reward)
+                
+            positive_idx = np.where(np.array(rewards) > 0)[0]
+            
+            if len(positive_idx) == 0:
+                action = random.choice(range(self.action_options))
+            else:
+                action = random.choice(positive_idx)
         return action
 
     def compute_mask(self, action, current_mask):
@@ -143,15 +156,23 @@ class LocalizationAgent:
         img_transposed = np.transpose(cropped_img, (2, 0, 1)) 
         
         # SNN models might expect batches, so we add batch dim
-        image_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float() / 255.0
+        image_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(self.device) / 255.0
         
+        # Pre-compute CNN features to save memory and training time
+        was_training = self.model.training
+        self.model.eval()
+        with torch.no_grad():
+            feature_tensor = self.model.extract_features(image_tensor).cpu()
+        if was_training:
+            self.model.train()
+            
         feat_hist = np.zeros(self.action_options * self.history_size)
         for i, act in enumerate(history):
             if act != -1:
                 feat_hist[i * self.action_options + act] = 1
         history_tensor = torch.tensor(feat_hist).float().unsqueeze(0)
         
-        return image_tensor, history_tensor
+        return feature_tensor, history_tensor
 
     def step(self, image, history, current_mask, ground_truth, step_count, epsilon):
         height, width, _ = image.shape
