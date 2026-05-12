@@ -18,7 +18,7 @@ class TFDSVOC2007TestDataset:
         self.target_class = target_class
         
         # Download and load the dataset
-        ds, info = tfds.load('voc/2007', split='test', with_info=True)
+        ds, info = tfds.load('voc/2007', split='test', with_info=True, data_dir="./dataset")
         self.class_names = info.features['objects'].feature['label'].names
         
         self.samples = []
