@@ -18,7 +18,7 @@ class SQNConverted(nn.Module):
         self.simulation_time = simulation_time
         self.extractor_name = extractor_name
         self.dueling = dueling
-        
+        self.backbone = None
         self.is_snn = False # Flag indicating if it has been converted
         
         if self.extractor_name == 'vgg16':

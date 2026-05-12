@@ -38,7 +38,7 @@ class SQNSurrogate(nn.Module):
         self.simulation_time = simulation_time
         self.extractor_name = extractor_name
         self.dueling = dueling
-
+        self.backbone = None
         
         self.alpha = alpha
         self.beta = beta

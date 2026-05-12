@@ -90,9 +90,9 @@ def main():
     is_dueling = (args.algo == 'dueling')
     
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.extractor, history_dim=history_dim, dueling=is_dueling)
+        model = SQNSurrogate(simulation_time=args.simulate, extractor_name=args.extractor, history_dim=history_dim, dueling=is_dueling)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.extractor, history_dim=history_dim, dueling=is_dueling)
+        model = SQNConverted(simulation_time=args.simulate, extractor_name=args.extractor, history_dim=history_dim, dueling=is_dueling)
     # elif args.method == 'stdp':
     #     if args.extractor == 'vgg16':
     #         raise NotImplementedError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")

@@ -42,9 +42,9 @@ def main():
     
     history_dim = 9 * args.replay
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.extractor, history_dim=history_dim)
+        model = SQNSurrogate(simulation_time=args.simulate, extractor_name=args.extractor, history_dim=history_dim)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.extractor, history_dim=history_dim)
+        model = SQNConverted(simulation_time=args.simulate, extractor_name=args.extractor, history_dim=history_dim)
         model.is_snn = True # Set to SNN mode for evaluation
         
     model = model.to(device)
