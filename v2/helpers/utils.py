@@ -20,9 +20,9 @@ def get_optimizer(model, opt_name, lr, weight_decay=0.0):
     else:
         raise ValueError(f"Unknown optimizer: {opt_name}")
 
-def plot_training_results(losses, epsilons, method, target):
+def plot_training_results(losses, epsilons, method, target, log_dir='logs'):
     """Save training metrics to CSV and plot them"""
-    os.makedirs('logs', exist_ok=True)
+    os.makedirs(log_dir, exist_ok=True)
     
     # Save to CSV
     df = pd.DataFrame({
@@ -30,7 +30,7 @@ def plot_training_results(losses, epsilons, method, target):
         'loss': losses,
         'epsilon': epsilons
     })
-    csv_path = f"logs/{method}_{target}_training_log.csv"
+    csv_path = os.path.join(log_dir, f"{method}_{target}_training_log.csv")
     df.to_csv(csv_path, index=False)
     print(f"Training logs saved to {csv_path}")
     
@@ -52,7 +52,7 @@ def plot_training_results(losses, epsilons, method, target):
     plt.title(f"Training Metrics ({method} - {target})")
     fig.tight_layout()
     
-    plot_path = f"logs/{method}_{target}_metrics.png"
+    plot_path = os.path.join(log_dir, f"{method}_{target}_metrics.png")
     plt.savefig(plot_path)
     print(f"Training plot saved to {plot_path}")
     plt.close()

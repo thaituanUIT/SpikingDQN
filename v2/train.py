@@ -59,7 +59,7 @@ def main():
     
     # Logging and Saving
     log_group = parser.add_argument_group('Logging and Saving')
-    log_group.add_argument('--logging', action='store_true', help="Enable logging")
+    log_group.add_argument('--logging-dir', type=str, default=None, help="Directory to save logs. If None, uses 'logs' folder.")
     log_group.add_argument('--save', type=str, choices = ["best", "last", "epoch", "none"], default="last", help="Save model mode")
     
     args = parser.parse_args()
@@ -148,8 +148,8 @@ def main():
         validation_mode=args.validation
     )
     
-    if args.logging:
-        plot_training_results(losses, epsilons, args.method, args.target)
+    log_dir = args.logging_dir if args.logging_dir else "logs"
+    plot_training_results(losses, epsilons, args.method, args.target, log_dir=log_dir)
     
     # 6. ATS Conversion (if applicable)
     if args.method == 'ats':
