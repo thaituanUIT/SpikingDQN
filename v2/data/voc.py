@@ -26,7 +26,7 @@ class VOCDataset(Dataset):
             image_set = split
             
         print(f"Downloading/Loading VOC dataset (Target: {self.target_class}) via torchvision...")
-        self.voc = VOCDetection(root=self.root_dir, year='2012', image_set=image_set, download=True)
+        self.voc = VOCDetection(root=self.root_dir, image_set=image_set, download=True)
         
         self.samples = []
         self._load_data(num_samples)

@@ -114,19 +114,30 @@ class Agent():
         return iou
 
     def compute_reward(self, actual_state, previous_state, ground_truth):
-        res = self.intersection_over_union(actual_state, ground_truth) - self.intersection_over_union(previous_state, ground_truth)
-        if res <= 0:
-            return -1
-        return 1
+        iou_new = self.intersection_over_union(actual_state, ground_truth)
+        iou_current = self.intersection_over_union(previous_state, ground_truth)
+        
+        # Strictly integer-based rewards
+        if iou_new > iou_current:
+            # Strict logic: Agent ONLY gets positive reward if it matches ground truth (> threshold)
+            if iou_new >= self.threshold:
+                return 1.0
+            else:
+                return 0.0
+        else:
+            return -1.0
       
     def rewrap(self, coord):
         return min(max(coord,0), 224)
       
     def compute_trigger_reward(self, actual_state, ground_truth):
-        res = self.intersection_over_union(actual_state, ground_truth)
-        if res>=self.threshold:
-            return self.nu
-        return -1*self.nu
+        iou = self.intersection_over_union(actual_state, ground_truth)
+        if iou >= self.threshold:
+            # Scale the exponential IoU up to allow meaningful integers, then strictly round down
+            reward = self.nu * (iou ** 2) * 10.0
+            return float(int(reward))
+        else:
+            return -float(int(self.nu))
 
     def get_best_next_action(self, actions, ground_truth):
         positive_actions = []

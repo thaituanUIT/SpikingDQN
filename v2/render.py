@@ -4,7 +4,7 @@ import os
 import numpy as np
 import cv2
 
-from data.voc import VOCDataset
+from data.voc_tfds import TFDSVOC2007TestDataset
 from agents.localization_agent import LocalizationAgent
 from models.surrogate import SQNSurrogate
 from models.ats import SQNConverted
@@ -25,7 +25,6 @@ def main():
     core_group.add_argument('--target', type=str, default='mixing')
     core_group.add_argument('--image-path', type=str, default=None, help="Path to specific image file")
     core_group.add_argument('--num-images', type=int, default=5, help="Number of images if no path provided")
-    core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     
     # Agent Parameters
     agent_group = parser.add_argument_group('Agent Parameters')
@@ -61,8 +60,7 @@ def main():
             'filename': os.path.basename(args.image_path)
         }]
     else:
-        voc_dir = args.voc_dir if args.voc_dir else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'dataset')
-        dataset = VOCDataset(root_dir=voc_dir, target_class=args.target, num_samples=args.num_images)
+        dataset = TFDSVOC2007TestDataset(target_class=args.target, num_samples=args.num_images)
         samples = [dataset[i] for i in range(len(dataset))]
     
     history_dim = 9 * args.replay
