@@ -23,7 +23,7 @@ class ReplayBuffer:
 class LocalizationAgent:
     def __init__(self, model, engine=None, optimizer=None, loss_fn='huber', device='cpu', 
                  gamma=0.9, max_steps=20, action_options=9, history_size=10,
-                 clip_grad=1.0, alpha=0.1, nu=3.0, threshold=0.5):
+                 clip_grad=1.0, alpha=0.1, nu=3.0, threshold=0.5, use_cache=True):
         self.model = model.to(device)
         self.optimizer = optimizer
         self.device = device
@@ -33,6 +33,12 @@ class LocalizationAgent:
         self.action_options = action_options
         self.history_size = history_size
         
+        # --- THÊM BIẾN CACHE ---
+        self.use_cache = use_cache
+        self.last_next_state = None
+        self.last_mask = None
+        
+        # Giữ nguyên sức chứa memory của branch bạn
         self.memory = ReplayBuffer(capacity=10000)
         
         # Loss function selection
@@ -161,21 +167,25 @@ class LocalizationAgent:
         else:
             return -float(int(self.nu))
 
-    def feature_extract(self, img, history, width, height, current_mask):
+    # --- THÊM THAM SỐ skip_image CHO CACHE ---
+    def feature_extract(self, img, history, width, height, current_mask, skip_image=False):
         """Converts mask to cropped image tensor and history list to tensor"""
-        cropped_img = crop_and_resize(img, current_mask)
-        img_transposed = np.transpose(cropped_img, (2, 0, 1)) 
-        
-        # SNN models might expect batches, so we add batch dim
-        image_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(self.device) / 255.0
-        
-        # Pre-compute CNN features to save memory and training time
-        was_training = self.model.training
-        self.model.eval()
-        with torch.no_grad():
-            feature_tensor = self.model.extract_features(image_tensor).cpu()
-        if was_training:
-            self.model.train()
+        if not skip_image:
+            cropped_img = crop_and_resize(img, current_mask)
+            img_transposed = np.transpose(cropped_img, (2, 0, 1)) 
+            
+            # SNN models might expect batches, so we add batch dim
+            image_tensor = torch.from_numpy(img_transposed).unsqueeze(0).float().to(self.device) / 255.0
+            
+            # Pre-compute CNN features to save memory and training time
+            was_training = self.model.training
+            self.model.eval()
+            with torch.no_grad():
+                feature_tensor = self.model.extract_features(image_tensor).cpu()
+            if was_training:
+                self.model.train()
+        else:
+            feature_tensor = None
             
         feat_hist = np.zeros(self.action_options * self.history_size)
         for i, act in enumerate(history):
@@ -187,7 +197,14 @@ class LocalizationAgent:
 
     def step(self, image, history, current_mask, ground_truth, step_count, epsilon):
         height, width, _ = image.shape
-        image_tensor, history_tensor = self.feature_extract(image, history, width, height, current_mask)
+        
+        # --- LOGIC TÁI SỬ DỤNG CACHE ---
+        if self.use_cache and self.last_next_state is not None and np.array_equal(current_mask, self.last_mask):
+            image_tensor = self.last_next_state
+            # Still need to compute history_tensor as it changes
+            _, history_tensor = self.feature_extract(image, history, width, height, current_mask, skip_image=True)
+        else:
+            image_tensor, history_tensor = self.feature_extract(image, history, width, height, current_mask)
         
         # Handle maximum steps termination
         if step_count >= self.max_steps:
@@ -206,6 +223,11 @@ class LocalizationAgent:
             done = False
 
         next_image_tensor, next_history_tensor = self.feature_extract(image, history, width, height, new_mask)
+        
+        # --- CẬP NHẬT CACHE ---
+        if self.use_cache:
+            self.last_next_state = next_image_tensor
+            self.last_mask = new_mask
         
         # Store transition in numpy for simplicity in replay buffer
         state = {'image': image_tensor.numpy()[0], 'history': history_tensor.numpy()[0]}
