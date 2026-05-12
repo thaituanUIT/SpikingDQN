@@ -3,7 +3,7 @@ import csv
 import torch
 import numpy as np
 
-def test_model(agent, dataset, logging=False, output_file='test_results.csv', verbose=True):
+def test_model(agent, dataset, log_dir=None, output_file='test_results.csv', verbose=True):
     if verbose:
         print(f"\n--- Starting Evaluation on {len(dataset)} samples ---")
     
@@ -112,9 +112,9 @@ def test_model(agent, dataset, logging=False, output_file='test_results.csv', ve
         print(f"Localization Accuracy (IoU >= 0.5): {acc_05*100:.2f}%")
         print(f"Localization Accuracy (IoU >= 0.7): {acc_07*100:.2f}%")
     
-    if logging:
-        os.makedirs('logs', exist_ok=True)
-        csv_path = os.path.join('logs', output_file)
+    if log_dir:
+        os.makedirs(log_dir, exist_ok=True)
+        csv_path = os.path.join(log_dir, output_file)
         with open(csv_path, mode='w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=['Image_ID', 'Ground_Truth', 'Prediction', 'Steps', 'IoU'])
             writer.writeheader()
