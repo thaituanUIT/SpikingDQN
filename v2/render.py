@@ -20,8 +20,8 @@ def main():
     
     # Core Parameters
     core_group = parser.add_argument_group('Core Parameters')
-    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats'], required=True)
-    core_group.add_argument('--backbone', type=str, choices=['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet'], default='conv')
+    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats', 'stdp'], required=True, help="SNN method to render: surrogate or ats")
+    core_group.add_argument('--extractor', type=str, choices=['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet'], default='conv', help="Feature extractor backbone")
     core_group.add_argument('--target', type=str, default='mixing')
     core_group.add_argument('--image-path', type=str, default=None, help="Path to specific image file")
     core_group.add_argument('--num-images', type=int, default=5, help="Number of images if no path provided")
@@ -65,12 +65,12 @@ def main():
     
     history_dim = 9 * args.replay
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
+        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.extractor, history_dim=history_dim)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
+        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.extractor, history_dim=history_dim)
         model.is_snn = True
     elif args.method == 'stdp':
-        if args.backbone == 'vgg16':
+        if args.extractor == 'vgg16':
             raise ValueError("STDP method requires raw image input and cannot be used with a VGG16 backbone.")
         model = SQNSTDP(history_dim=history_dim)
         model.set_pretrain_mode(False)
