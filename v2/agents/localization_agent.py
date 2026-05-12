@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from collections import deque
-from data.preprocess import crop_and_resize
+from v2.data.preprocess import crop_and_resize
 
 class ReplayBuffer:
     def __init__(self, capacity):
@@ -53,7 +53,7 @@ class LocalizationAgent:
 
         # Initialize default DQNEngine if none provided
         if engine is None:
-            from backbone.engine import DQNEngine
+            from v2.backbone.engine import DQNEngine
             self.engine = DQNEngine(self.model, gamma=self.gamma, use_target_net=False)
         else:
             self.engine = engine

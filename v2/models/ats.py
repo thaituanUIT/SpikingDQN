@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as T
-from backbone.model import (
+from v2.backbone.model import (
     VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone,
     ViTBackbone, EfficientNetBackbone, MobileNetBackbone
 )
@@ -39,7 +39,7 @@ class SQNConverted(nn.Module):
         self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
         if self.dueling:
-            from backbone.engine import DuelingHead
+            from v2.backbone.engine import DuelingHead
             self.fc = nn.Sequential(
                 nn.Linear(self.fc_input_dim, 128),
                 nn.ReLU(),
