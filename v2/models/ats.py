@@ -9,35 +9,35 @@ from backbone.model import (
 )
 
 class SQNConverted(nn.Module):
-    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, backbone_name='conv', dueling=False):
+    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, extractor_name='conv', dueling=False):
         super(SQNConverted, self).__init__()
         
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.history_dim = history_dim
         self.simulation_time = simulation_time
-        self.backbone_name = backbone_name
+        self.extractor_name = extractor_name
         self.dueling = dueling
         
         self.is_snn = False # Flag indicating if it has been converted
         
-        # 1. Khởi tạo Backbone
-        if self.backbone_name == 'vgg16':
-            self.backbone = VGG16Backbone()
-        elif self.backbone_name == 'resnet18':
-            self.backbone = ResNetBackbone(model_name='resnet18')
-        elif self.backbone_name == 'fusion':
-            self.backbone = FusionBackbone(model_name='resnet18')
-        elif self.backbone_name == 'vit':
-            self.backbone = ViTBackbone(model_name='vit_b_16')
-        elif self.backbone_name == 'efficientnet':
-            self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
-        elif self.backbone_name == 'mobilenet':
-            self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
+        # 1. Khởi tạo Extractor
+        if self.extractor_name == 'vgg16':
+            self.extractor = VGG16Backbone()
+        elif self.extractor_name == 'resnet18':
+            self.extractor = ResNetBackbone(model_name='resnet18')
+        elif self.extractor_name == 'fusion':
+            self.extractor = FusionBackbone(model_name='resnet18')
+        elif self.extractor_name == 'vit':
+            self.extractor = ViTBackbone(model_name='vit_b_16')
+        elif self.extractor_name == 'efficientnet':
+            self.extractor = EfficientNetBackbone(model_name='efficientnet_b0')
+        elif self.extractor_name == 'mobilenet':
+            self.extractor = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
-            self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
+            self.extractor = SimpleConvBackbone(input_channels=self.input_dim[0])
             
-        self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
+        self.fc_input_dim = self.extractor.get_output_dim() + self.history_dim
 
         # 2. Xác định Final Layer trước
         if self.dueling:
@@ -77,7 +77,7 @@ class SQNConverted(nn.Module):
     def extract_features(self, state):
         """Extracts CNN features, bypassing SNN and FC layers."""
         with torch.no_grad():
-            return self.backbone(state)
+            return self.extractor(state)
 
     def forward(self, state, history):
         if not self.is_snn:
@@ -85,25 +85,24 @@ class SQNConverted(nn.Module):
             if state.dim() == 2:
                 features = state
             else:
-                features = self.backbone(state)
+                features = self.extractor(state)
                 
             x = torch.cat([features, history], dim=1)
             q_values = self.fc(x)
             return q_values
         else:
-            
             # SNN Forward pass (Integrate and Fire simulation)
             state_size = state.size(0)
             device = state.device
             
             out_v = torch.zeros(state_size, self.output_dim, device=device)
             
-            # ATS conversion normally skips Backbone and applies to the trained RL head
+            # ATS conversion normally skips Extractor and applies to the trained RL head
             if state.dim() == 2:
                 constant_features = state
-            elif self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
+            elif self.extractor_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                 with torch.no_grad():
-                    constant_features = self.backbone(state)
+                    constant_features = self.extractor(state)
             
             mem_conv = {}
             mem_fc = {}
@@ -112,12 +111,12 @@ class SQNConverted(nn.Module):
             for t in range(self.simulation_time):
                 x_in = state
                 
-                if state.dim() == 2 or self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
+                if state.dim() == 2 or self.extractor_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                     features = constant_features
                 else:
                     # Manual pass through layers to track membrane potentials
                     c_idx = 0
-                    for layer in self.backbone.get_layers():
+                    for layer in self.extractor.get_layers():
                         if isinstance(layer, (nn.Conv2d, nn.MaxPool2d, nn.Flatten, nn.Linear)):
                             x_in = layer(x_in)
                         elif isinstance(layer, nn.ReLU):
@@ -156,7 +155,7 @@ class SQNConverted(nn.Module):
                     # Điều này là CHÍNH XÁC vì khi inference SNN (is_snn=True), hàm eval() 
                     # cũng khiến Dropout không có tác dụng.
                 
-                out_v += x_in # Last layer is Linear (no ReLU), acts as voltage accumulator
+                out_v += x_in # Last layer is Linear/DuelingHead (no ReLU), acts as voltage accumulator
 
             return out_v / self.simulation_time
 
