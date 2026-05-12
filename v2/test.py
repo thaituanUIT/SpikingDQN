@@ -33,7 +33,7 @@ def main():
     # System Parameters
     sys_group = parser.add_argument_group('System Parameters')
     sys_group.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
-    sys_group.add_argument('--logging', action='store_true', help="Log metrics to CSV")
+    sys_group.add_argument('--logging-dir', type=str, default=None, help="Directory to save logs. If None, uses 'logs' folder.")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -64,7 +64,8 @@ def main():
     agent = LocalizationAgent(model=model, device=device, history_size=args.replay, max_steps=args.max_steps)
     
     csv_file = f"test_{args.method}_{args.target}_{args.extractor}.csv"
-    test_model(agent, dataset, logging=args.logging, output_file=csv_file)
+    log_dir = args.logging_dir if args.logging_dir else "logs"
+    test_model(agent, dataset, log_dir=log_dir, output_file=csv_file)
 
 if __name__ == '__main__':
     main()

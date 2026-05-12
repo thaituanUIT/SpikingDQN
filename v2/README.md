@@ -65,7 +65,7 @@ Train an agent using the unified `train.py` script. The script automatically han
 | `--early-stop` | int | `0` | Early stopping if no improvement for N epochs. |
 | `--validation` | string | `none` | Validation metric for saving the best model (`none`, `loss`, `iou`). |
 | `--val-ratio`  | float | `0.2` | Ratio of samples to reserve for validation if enabled. |
-| `--logging` | flag | `False` | Enable logging. |
+| `--logging-dir` | string | `None` | Directory to save logs. If None, auto-creates 'logs'. |
 | `--save` | string | `last` | Save model mode (`best`, `last`, `epoch`, `none`). |
 
 Usage Examples:
@@ -97,13 +97,13 @@ Test the saved agent policies using `test.py`. Evaluation is now strictly perfor
 | `--max-steps` | int | `20` | Max steps per image. |
 | `--simulate` | int | `10` | Number of simulation timesteps for the SNN. |
 | `--weights` | string | `None` | Path to specific weights file. |
-| `--logging` | flag | `False` | Log metrics to CSV. |
+| `--logging-dir` | string | `None` | Directory to save logs. |
 
 Usage Examples:
 
 ```bash
 # Evaluate the Surrogate model on 50 random samples and log results
-python v2/test.py --method surrogate --target mixing --num-samples 50 --random --logging
+python v2/test.py --method surrogate --target mixing --num-samples 50 --random --logging-dir eval_logs
 
 # Evaluate the ATS model using the VGG16 extractor
 python v2/test.py --method ats --target mixing --extractor vgg16
