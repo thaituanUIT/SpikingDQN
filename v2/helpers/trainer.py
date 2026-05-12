@@ -95,7 +95,7 @@ def train_stdp_pretraining(model, dataset, device, stdp_epochs=3, lr_decay=0.5):
     print("--- STDP Pre-training Complete ---\n")
 
 from torch.utils.data import WeightedRandomSampler
-from helpers.tester import test_model
+from v2.helpers.tester import test_model
 
 def run_rl_training(agent, dataset, epochs, epsilon_start=1.0, epsilon_min=0.1, decay_steps=10, early_stop_patience=0, save_mode="none", save_path="weights/best_model.pth", batch_size=20, target_update=1, val_dataset=None, validation_mode='none'):
     """Standard DQN Training Loop"""

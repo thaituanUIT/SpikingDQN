@@ -4,12 +4,12 @@ import os
 import numpy as np
 import csv
 
-from data.voc_tfds import TFDSVOC2007TestDataset
-from agents.localization_agent import LocalizationAgent
-from models.surrogate import SQNSurrogate
-from models.ats import SQNConverted
+from v2.data.voc_tfds import TFDSVOC2007TestDataset
+from v2.agents.localization_agent import LocalizationAgent
+from v2.models.surrogate import SQNSurrogate
+from v2.models.ats import SQNConverted
 
-from helpers.tester import test_model
+from v2.helpers.tester import test_model
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Testing (v2)")
     

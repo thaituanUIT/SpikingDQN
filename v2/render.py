@@ -4,16 +4,16 @@ import os
 import numpy as np
 import cv2
 
-from data.voc_tfds import TFDSVOC2007TestDataset
-from agents.localization_agent import LocalizationAgent
-from models.surrogate import SQNSurrogate
-from models.ats import SQNConverted
-from models.stdp import SQNSTDP
+from v2.data.voc_tfds import TFDSVOC2007TestDataset
+from v2.agents.localization_agent import LocalizationAgent
+from v2.models.surrogate import SQNSurrogate
+from v2.models.ats import SQNConverted
+from v2.models.stdp import SQNSTDP
 
 import matplotlib.pyplot as plt
 
 
-from helpers.renderer import render_predictions
+from v2.helpers.renderer import render_predictions
 
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Visualization (v2)")

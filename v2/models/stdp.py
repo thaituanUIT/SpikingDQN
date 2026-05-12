@@ -238,7 +238,7 @@ class SQNSTDP(nn.Module):
         
         # RL Decision Head (Trained with backprop/DQN)
         if self.dueling:
-            from backbone.engine import DuelingHead
+            from v2.backbone.engine import DuelingHead
             self.fc = nn.Sequential(
                 nn.Linear(fc_input_dim, 128),
                 nn.ReLU(),

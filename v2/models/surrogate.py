@@ -2,7 +2,7 @@
 import torch
 import torch.nn as nn
 import torchvision.transforms as T
-from backbone.model import (
+from v2.backbone.model import (
     VGG16Backbone, SimpleConvBackbone, ResNetBackbone, FusionBackbone,
     ViTBackbone, EfficientNetBackbone, MobileNetBackbone
 )
@@ -66,7 +66,7 @@ class SQNSurrogate(nn.Module):
         self.fc2 = nn.Linear(128, 256)
         
         if self.dueling:
-            from backbone.engine import DuelingHead
+            from v2.backbone.engine import DuelingHead
             self.fc3 = DuelingHead(256, 128, self.output_dim)
         else:
             self.fc3 = nn.Linear(256, self.output_dim)

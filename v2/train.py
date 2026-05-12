@@ -6,14 +6,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from data.voc import VOCDataset
-from agents.localization_agent import LocalizationAgent
-from models.surrogate import SQNSurrogate
-from models.ats import SQNConverted
-# from models.stdp import SQNSTDP
+from v2.data.voc import VOCDataset
+from v2.agents.localization_agent import LocalizationAgent
+from v2.models.surrogate import SQNSurrogate
+from v2.models.ats import SQNConverted
+# from v2.models.stdp import SQNSTDP
 
-from helpers.utils import get_optimizer, plot_training_results
-from helpers.trainer import train_stdp_pretraining, run_rl_training
+from v2.helpers.utils import get_optimizer, plot_training_results
+from v2.helpers.trainer import train_stdp_pretraining, run_rl_training
 
 def main():
     parser = argparse.ArgumentParser(description="Active Object Localization Training (v2)")
@@ -108,7 +108,7 @@ def main():
     #     optimizer = get_optimizer(model, args.optimizer, args.lr, args.weight_decay)
 
     # 4. Initialize Engine
-    from backbone.engine import DQNEngine, DoubleDQNEngine
+    from v2.backbone.engine import DQNEngine, DoubleDQNEngine
     if args.algo == 'double':
         engine = DoubleDQNEngine(model, gamma=args.gamma, use_target_net=True)
     elif args.algo == 'dueling':
