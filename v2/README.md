@@ -30,7 +30,7 @@ The framework supports two interchangeable SNN architectures:
 
 By default, the `surrogate` and `ats` methods use a shallow, built-in Convolutional Neural Network layer stack to extract spatial features directly from the raw pixels. 
 
-To improve convergence and feature abstraction during Reinforcement Learning, researchers can inject a frozen **VGG16 (`--backbone vgg16`)** model to extract 25,088 features from the image before feeding it directly into the Spiking fully-connected layers.
+To improve convergence and feature abstraction during Reinforcement Learning, researchers can inject a frozen **VGG16 (`--extractor vgg16`)** model to extract 25,088 features from the image before feeding it directly into the Spiking fully-connected layers.
 
 ## Training Usage
 
@@ -41,7 +41,7 @@ Train an agent using the unified `train.py` script. The script automatically han
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--method` | string | (required) | SNN method to use: `surrogate` or `ats`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, `fusion`, `vit`, `efficientnet`, or `mobilenet`. |
+| `--extractor` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, `fusion`, `vit`, `efficientnet`, or `mobilenet`. |
 | `--target` | string | `mixing` | Target class (e.g., `aeroplane`) or `mixing` for all classes. |
 | `--num-samples`| int | `None` | Limit the number of samples loaded from VOC2012. |
 | `--random` | flag | `False` | Random sample from dataset. |
@@ -74,8 +74,8 @@ Usage Examples:
 # Basic Surrogate training isolating the "aeroplane" class
 python v2/train.py --method surrogate --target aeroplane --epochs 20
 
-# Surrogate training over the entire mixed dataset using a VGG16 extraction backbone
-python v2/train.py --method surrogate --target mixing --backbone vgg16 --epochs 50
+# Surrogate training over the entire mixed dataset using a VGG16 extraction extractor
+python v2/train.py --method surrogate --target mixing --extractor vgg16 --epochs 50
 
 # ATS training with a 15-timestep simulation
 python v2/train.py --method ats --target aeroplane --simulate 15
@@ -90,7 +90,7 @@ Test the saved agent policies using `test.py`. Evaluation is now strictly perfor
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--method` | string | (required) | SNN method to evaluate: `surrogate` or `ats`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, `fusion`, `vit`, `efficientnet`, or `mobilenet`. |
+| `--extractor` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, `fusion`, `vit`, `efficientnet`, or `mobilenet`. |
 | `--target` | string | `mixing` | Target class for evaluation. |
 | `--num-samples`| int | `10` | Number of samples to evaluate on from VOC2007 test. |
 | `--replay` | int | `10` | History size. |
@@ -105,8 +105,8 @@ Usage Examples:
 # Evaluate the Surrogate model on 50 random samples and log results
 python v2/test.py --method surrogate --target mixing --num-samples 50 --random --logging
 
-# Evaluate the ATS model using the VGG16 backbone
-python v2/test.py --method ats --target mixing --backbone vgg16
+# Evaluate the ATS model using the VGG16 extractor
+python v2/test.py --method ats --target mixing --extractor vgg16
 ```
 
 ## Visualization Usage
@@ -118,7 +118,7 @@ Visualize the agent's search path (Blue bounds -> Red bounds) using the `render.
 | Parameter | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
 | `--method` | string | (required) | SNN method to evaluate: `surrogate` or `ats`. |
-| `--backbone` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, `fusion`, `vit`, `efficientnet`, or `mobilenet`. |
+| `--extractor` | string | `conv` | Feature extractor: `conv`, `vgg16`, `resnet18`, `fusion`, `vit`, `efficientnet`, or `mobilenet`. |
 | `--target` | string | `mixing` | Target class for evaluation. |
 | `--image-path` | string | `None` | Path to specific image file to render. |
 | `--num-images`| int | `5` | Number of images to render if no path provided. |
@@ -136,8 +136,8 @@ Usage Examples:
 # Render the Surrogate model search path for 5 images
 python v2/render.py --method surrogate --target aeroplane --num-images 5
 
-# Render the ATS model using the VGG16 backbone
-python v2/render.py --method ats --target mixing --backbone vgg16
+# Render the ATS model using the VGG16 extractor
+python v2/render.py --method ats --target mixing --extractor vgg16
 ```
 
 ## Dataset 

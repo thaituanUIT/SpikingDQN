@@ -20,6 +20,7 @@ def main():
     core_group.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
     core_group.add_argument('--image-path', type=str, default=None, help="Path to specific image file")
     core_group.add_argument('--num-images', type=int, default=5, help="Number of images if no path provided")
+    core_group.add_argument('--extractor', type=str, choices=['vgg16', 'resnet18', 'vit', 'efficientnet', 'mobilenet'], default='vgg16', help="Feature extractor backbone")
     core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
     
     # Agent Parameters
@@ -65,7 +66,8 @@ def main():
         nu=args.nu,
         threshold=args.threshold,
         max_steps=args.max_steps,
-        device=device
+        device=device,
+        extractor_name=args.extractor
     )
     
     # Load weights

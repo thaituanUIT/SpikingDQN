@@ -16,6 +16,7 @@ def main():
     # Core Parameters
     core_group = parser.add_argument_group('Core Parameters')
     core_group.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
+    core_group.add_argument('--extractor', type=str, choices=['vgg16', 'resnet18', 'vit', 'efficientnet', 'mobilenet'], default='vgg16', help="Feature extractor backbone")
     core_group.add_argument('--num-samples', type=int, default=10, help="Test on 10 samples by default")
     
     # Agent Parameters
@@ -43,7 +44,8 @@ def main():
         nu=args.nu,
         threshold=args.threshold,
         max_steps=args.max_steps,
-        device=device
+        device=device,
+        extractor_name=args.extractor
     )
     
     # Load weights

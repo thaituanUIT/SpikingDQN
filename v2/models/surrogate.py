@@ -29,14 +29,14 @@ class SuperSpike(torch.autograd.Function):
 
 class SQNSurrogate(nn.Module):
     def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, 
-                 simulation_time=10, alpha=0.9, beta=0.8, threshold=1.0, backbone_name='conv', dueling=False):
+                 simulation_time=10, alpha=0.9, beta=0.8, threshold=1.0, extractor_name='conv', dueling=False):
         super(SQNSurrogate, self).__init__()
         
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.history_dim = history_dim
         self.simulation_time = simulation_time
-        self.backbone_name = backbone_name
+        self.extractor_name = extractor_name
         self.dueling = dueling
 
         
@@ -45,17 +45,17 @@ class SQNSurrogate(nn.Module):
         self.threshold = threshold
         self.spike_fn = SuperSpike.apply
 
-        if self.backbone_name == 'vgg16':
+        if self.extractor_name == 'vgg16':
             self.backbone = VGG16Backbone()
-        elif self.backbone_name == 'resnet18':
+        elif self.extractor_name == 'resnet18':
             self.backbone = ResNetBackbone(model_name='resnet18')
-        elif self.backbone_name == 'fusion':
+        elif self.extractor_name == 'fusion':
             self.backbone = FusionBackbone(model_name='resnet18')
-        elif self.backbone_name == 'vit':
+        elif self.extractor_name == 'vit':
             self.backbone = ViTBackbone(model_name='vit_b_16')
-        elif self.backbone_name == 'efficientnet':
+        elif self.extractor_name == 'efficientnet':
             self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
-        elif self.backbone_name == 'mobilenet':
+        elif self.extractor_name == 'mobilenet':
             self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
             self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])

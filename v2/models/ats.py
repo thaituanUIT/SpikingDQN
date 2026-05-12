@@ -9,29 +9,29 @@ from backbone.model import (
 )
 
 class SQNConverted(nn.Module):
-    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, backbone_name='conv', dueling=False):
+    def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, simulation_time=10, extractor_name='conv', dueling=False):
         super(SQNConverted, self).__init__()
         
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.history_dim = history_dim
         self.simulation_time = simulation_time
-        self.backbone_name = backbone_name
+        self.extractor_name = extractor_name
         self.dueling = dueling
         
         self.is_snn = False # Flag indicating if it has been converted
         
-        if self.backbone_name == 'vgg16':
+        if self.extractor_name == 'vgg16':
             self.backbone = VGG16Backbone()
-        elif self.backbone_name == 'resnet18':
+        elif self.extractor_name == 'resnet18':
             self.backbone = ResNetBackbone(model_name='resnet18')
-        elif self.backbone_name == 'fusion':
+        elif self.extractor_name == 'fusion':
             self.backbone = FusionBackbone(model_name='resnet18')
-        elif self.backbone_name == 'vit':
+        elif self.extractor_name == 'vit':
             self.backbone = ViTBackbone(model_name='vit_b_16')
-        elif self.backbone_name == 'efficientnet':
+        elif self.extractor_name == 'efficientnet':
             self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
-        elif self.backbone_name == 'mobilenet':
+        elif self.extractor_name == 'mobilenet':
             self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
             self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
@@ -83,7 +83,7 @@ class SQNConverted(nn.Module):
             
             # ATS conversion normally skips VGG/ResNet and only applies to the trained RL head
             # Or we can treat pre-trained output as a constant current.
-            if self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
+            if self.extractor_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                 if state.dim() == 2:
                     constant_features = state
                 else:
@@ -97,7 +97,7 @@ class SQNConverted(nn.Module):
             for t in range(self.simulation_time):
                 x_in = state
                 
-                if self.backbone_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
+                if self.extractor_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                     features = constant_features
                 else:
                     # Manual pass through layers to track membrane potentials

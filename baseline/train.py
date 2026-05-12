@@ -16,6 +16,7 @@ def main():
     # Core Parameters
     core_group = parser.add_argument_group('Core Parameters')
     core_group.add_argument('--target', type=str, default='mixing', help="Target class or 'mixing' for all")
+    core_group.add_argument('--extractor', type=str, choices=['vgg16', 'resnet18', 'vit', 'efficientnet', 'mobilenet'], default='vgg16', help="Feature extractor backbone")
     core_group.add_argument('--num-samples', type=int, default=None, help="Number of samples to load from VOC")
     core_group.add_argument('--random', action='store_true', help="Random sample from dataset")
     core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
@@ -28,6 +29,7 @@ def main():
     rl_group.add_argument('--nu', type=float, default=3.0, help="Trigger reward weight")
     rl_group.add_argument('--threshold', type=float, default=0.5, help="IoU threshold for trigger reward")
     rl_group.add_argument('--target-update', type=int, default=1, help="Epochs between target network updates")
+    rl_group.add_argument('--use-cache', action='store_true', default=True, help="Use feature caching during training")
     
     # Optimizer/Training Parameters
     train_group = parser.add_argument_group('Training/Optimizer Parameters')
@@ -67,7 +69,9 @@ def main():
         nu=args.nu,
         threshold=args.threshold,
         max_steps=args.max_steps,
-        device=device
+        device=device,
+        extractor_name=args.extractor,
+        use_cache=args.use_cache
     )
     
     os.makedirs('baseline/weights', exist_ok=True)

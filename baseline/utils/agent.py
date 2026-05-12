@@ -36,7 +36,7 @@ import glob
 from PIL import Image
 
 class Agent():
-    def __init__(self, classe="mixing", alpha=0.1, nu=3.0, threshold=0.5, max_steps=20, load=False, device='cpu'):
+    def __init__(self, classe="mixing", alpha=0.1, nu=3.0, threshold=0.5, max_steps=20, load=False, device='cpu', extractor_name='vgg16', use_cache=True):
         self.BATCH_SIZE = 100
         self.GAMMA = 0.900
         self.EPS = 1  #epsilon 
@@ -48,13 +48,16 @@ class Agent():
         self.device = device
         self.use_cuda = (str(self.device) != 'cpu')
 
-        self.feature_extractor = FeatureExtractor()
+
+        self.feature_extractor = get_backbone(extractor_name)
+        input_dim = self.feature_extractor.output_dim + 81 # 81 is history_dim (9*9)
+
         if not load:
-            self.policy_net = DQN(screen_height, screen_width, self.n_actions)
+            self.policy_net = DQN(input_dim, self.n_actions)
         else:
             self.policy_net = self.load_network()
             
-        self.target_net = DQN(screen_height, screen_width, self.n_actions)
+        self.target_net = DQN(input_dim, self.n_actions)
         self.target_net.load_state_dict(self.policy_net.state_dict())
         self.target_net.eval()
         self.feature_extractor.eval()
@@ -77,6 +80,10 @@ class Agent():
         self.num_episodes = 15
         self.actions_history += [[100]*9]*20
         self.model = self.policy_net  # For v2 interface compatibility
+        
+        self.use_cache = use_cache
+        self.last_next_state = None
+        self.last_mask = None
 
     def save_network(self):
         torch.save(self.policy_net, self.save_path+"_"+self.classe)
@@ -221,9 +228,14 @@ class Agent():
             if i < 9:
                 self.actions_history[i][h] = 1
                 
-        state = self.compose_state(img_tensor, dtype=torch.FloatTensor)
-        if self.use_cuda:
-            state = state.cuda()
+                
+        # Feature Caching Logic
+        if self.use_cache and self.last_next_state is not None and np.array_equal(current_mask, self.last_mask):
+            state = self.last_next_state
+        else:
+            state = self.compose_state(img_tensor, dtype=torch.FloatTensor)
+            if self.use_cuda:
+                state = state.cuda()
         
         if step_count >= self.max_steps:
             action = 0 # Action 0 is trigger in baseline
@@ -253,6 +265,11 @@ class Agent():
             next_state = self.compose_state(next_img_tensor, dtype=torch.FloatTensor)
             if self.use_cuda:
                 next_state = next_state.cuda()
+            
+            # Update cache for next step
+            if self.use_cache:
+                self.last_next_state = next_state
+                self.last_mask = new_mask
             
         self.memory.push(state.cpu(), int(action), next_state.cpu() if next_state is not None else None, reward)
         
