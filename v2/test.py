@@ -15,8 +15,8 @@ def main():
     
     # Core Parameters
     core_group = parser.add_argument_group('Core Parameters')
-    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats'], required=True)
-    core_group.add_argument('--backbone', type=str, choices=['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet'], default='conv')
+    core_group.add_argument('--method', type=str, choices=['surrogate', 'ats'], required=True, help="SNN method to evaluate: surrogate or ats")
+    core_group.add_argument('--extractor', type=str, choices=['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet'], default='conv', help="Feature extractor backbone")
     core_group.add_argument('--target', type=str, default='mixing')
     core_group.add_argument('--num-samples', type=int, default=10, help="Test on 10 samples by default")
     core_group.add_argument('--voc-dir', type=str, default=None, help="Override default VOC2012 directory")
@@ -33,7 +33,7 @@ def main():
     # System Parameters
     sys_group = parser.add_argument_group('System Parameters')
     sys_group.add_argument('--weights', type=str, default=None, help="Path to specific weights file")
-    sys_group.add_argument('--logging', action='store_true', help="Log metrics to CSV")
+    sys_group.add_argument('--logging-dir', type=str, default=None, help="Directory to save logs. If None, uses 'logs' folder.")
     args = parser.parse_args()
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -42,9 +42,9 @@ def main():
     
     history_dim = 9 * args.replay
     if args.method == 'surrogate':
-        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
+        model = SQNSurrogate(simulation_time=args.simulate, backbone_name=args.extractor, history_dim=history_dim)
     elif args.method == 'ats':
-        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.backbone, history_dim=history_dim)
+        model = SQNConverted(simulation_time=args.simulate, backbone_name=args.extractor, history_dim=history_dim)
         model.is_snn = True # Set to SNN mode for evaluation
         
     model = model.to(device)
@@ -63,8 +63,9 @@ def main():
     # Agent wrapper (optimizer not needed for eval)
     agent = LocalizationAgent(model=model, device=device, history_size=args.replay, max_steps=args.max_steps)
     
-    csv_file = f"test_{args.method}_{args.target}_{args.backbone}.csv"
-    test_model(agent, dataset, logging=args.logging, output_file=csv_file)
+    csv_file = f"test_{args.method}_{args.target}_{args.extractor}.csv"
+    log_dir = args.logging_dir if args.logging_dir else "logs"
+    test_model(agent, dataset, log_dir=log_dir, output_file=csv_file)
 
 if __name__ == '__main__':
     main()
