@@ -21,23 +21,23 @@ class SQNConverted(nn.Module):
         
         self.is_snn = False # Flag indicating if it has been converted
         
-        # 1. Khởi tạo Extractor
+        # 1. Khởi tạo Backbone
         if self.extractor_name == 'vgg16':
-            self.extractor = VGG16Backbone()
+            self.backbone = VGG16Backbone()
         elif self.extractor_name == 'resnet18':
-            self.extractor = ResNetBackbone(model_name='resnet18')
+            self.backbone = ResNetBackbone(model_name='resnet18')
         elif self.extractor_name == 'fusion':
-            self.extractor = FusionBackbone(model_name='resnet18')
+            self.backbone = FusionBackbone(model_name='resnet18')
         elif self.extractor_name == 'vit':
-            self.extractor = ViTBackbone(model_name='vit_b_16')
+            self.backbone = ViTBackbone(model_name='vit_b_16')
         elif self.extractor_name == 'efficientnet':
-            self.extractor = EfficientNetBackbone(model_name='efficientnet_b0')
+            self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
         elif self.extractor_name == 'mobilenet':
-            self.extractor = MobileNetBackbone(model_name='mobilenet_v3_small')
+            self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
-            self.extractor = SimpleConvBackbone(input_channels=self.input_dim[0])
+            self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
             
-        self.fc_input_dim = self.extractor.get_output_dim() + self.history_dim
+        self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
         # 2. Xác định Final Layer trước
         if self.dueling:
@@ -77,7 +77,7 @@ class SQNConverted(nn.Module):
     def extract_features(self, state):
         """Extracts CNN features, bypassing SNN and FC layers."""
         with torch.no_grad():
-            return self.extractor(state)
+            return self.backbone(state)
 
     def forward(self, state, history):
         if not self.is_snn:
@@ -85,7 +85,7 @@ class SQNConverted(nn.Module):
             if state.dim() == 2:
                 features = state
             else:
-                features = self.extractor(state)
+                features = self.backbone(state)
                 
             x = torch.cat([features, history], dim=1)
             q_values = self.fc(x)
@@ -97,12 +97,12 @@ class SQNConverted(nn.Module):
             
             out_v = torch.zeros(state_size, self.output_dim, device=device)
             
-            # ATS conversion normally skips Extractor and applies to the trained RL head
+            # ATS conversion normally skips Backbone and applies to the trained RL head
             if state.dim() == 2:
                 constant_features = state
             elif self.extractor_name in ['vgg16', 'resnet18', 'fusion', 'vit', 'efficientnet', 'mobilenet']:
                 with torch.no_grad():
-                    constant_features = self.extractor(state)
+                    constant_features = self.backbone(state)
             
             mem_conv = {}
             mem_fc = {}
@@ -116,7 +116,7 @@ class SQNConverted(nn.Module):
                 else:
                     # Manual pass through layers to track membrane potentials
                     c_idx = 0
-                    for layer in self.extractor.get_layers():
+                    for layer in self.backbone.get_layers():
                         if isinstance(layer, (nn.Conv2d, nn.MaxPool2d, nn.Flatten, nn.Linear)):
                             x_in = layer(x_in)
                         elif isinstance(layer, nn.ReLU):
