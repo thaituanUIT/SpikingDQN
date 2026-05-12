@@ -358,6 +358,11 @@ class Agent():
         image_feature = self.get_features(image, dtype)
         image_feature = image_feature.view(1,-1)
         history_flatten = self.actions_history.view(1,-1).type(dtype)
+        
+        # Ensure device match
+        if image_feature.device != history_flatten.device:
+            history_flatten = history_flatten.to(image_feature.device)
+            
         state = torch.cat((image_feature, history_flatten), 1)
         return state
     
