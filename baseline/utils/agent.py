@@ -320,28 +320,27 @@ class Agent():
         
         non_final_mask = torch.Tensor(tuple(map(lambda s: s is not None, batch.next_state))).bool()
         next_states = [s for s in batch.next_state if s is not None]
-        non_final_next_states = Variable(torch.cat(next_states), 
-                                         volatile=True).type(Tensor)
-        
-        state_batch = Variable(torch.cat(batch.state)).type(Tensor)
+        non_final_next_states = torch.cat(next_states).type(Tensor)
+        state_batch = torch.cat(batch.state).type(Tensor)
+        action_batch = torch.LongTensor(batch.action).view(-1,1).type(LongTensor)
+        reward_batch = torch.FloatTensor(batch.reward).view(-1,1).type(Tensor)
+
         if self.use_cuda:
             state_batch = state_batch.cuda()
-            non_final_next_states = non_final_next_states.cuda()
-        action_batch = Variable(torch.LongTensor(batch.action).view(-1,1)).type(LongTensor)
-        reward_batch = Variable(torch.FloatTensor(batch.reward).view(-1,1)).type(Tensor)
+            action_batch = action_batch.cuda()
+            reward_batch = reward_batch.cuda()
 
         state_action_values = self.policy_net(state_batch).gather(1, action_batch)
 
-        next_state_values = Variable(torch.zeros(self.BATCH_SIZE, 1).type(Tensor)) 
-
+        next_state_values = torch.zeros(self.BATCH_SIZE, 1).type(Tensor)
         if self.use_cuda:
             next_state_values = next_state_values.cuda()
-            action_batch = action_batch.cuda()
-            reward_batch = reward_batch.cuda()
-        
-        d = self.target_net(non_final_next_states) 
-        next_state_values[non_final_mask] = d.max(1)[0].view(-1,1)
-        next_state_values.volatile = False
+
+        with torch.no_grad():
+            if self.use_cuda:
+                non_final_next_states = non_final_next_states.cuda()
+            d = self.target_net(non_final_next_states) 
+            next_state_values[non_final_mask] = d.max(1)[0].view(-1,1)
 
         expected_state_action_values = (next_state_values * self.GAMMA) + reward_batch
 
