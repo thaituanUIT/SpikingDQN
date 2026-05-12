@@ -32,8 +32,19 @@ FloatTensor = torch.FloatTensor
 LongTensor = torch.LongTensor
 Tensor = torch.FloatTensor
 
-import glob
 from PIL import Image
+
+class LocalizationModelWrapper(nn.Module):
+    """Bridge for v2 evaluation logic to legacy DQN architecture"""
+    def __init__(self, policy_net):
+        super().__init__()
+        self.policy_net = policy_net
+        
+    def forward(self, img_feat, hist_feat):
+        if img_feat.device != hist_feat.device:
+            hist_feat = hist_feat.to(img_feat.device)
+        state = torch.cat((img_feat, hist_feat), 1)
+        return self.policy_net(state)
 
 class Agent():
     def __init__(self, classe="mixing", alpha=0.1, nu=3.0, threshold=0.5, max_steps=20, load=False, device='cpu', extractor_name='vgg16', use_cache=True):
@@ -79,7 +90,11 @@ class Agent():
         self.actions_history = []
         self.num_episodes = 15
         self.actions_history += [[100]*9]*20
-        self.model = self.policy_net  # For v2 interface compatibility
+        self.model = LocalizationModelWrapper(self.policy_net)  # For v2 interface compatibility
+        
+        from v2.backbone.engine import DQNEngine
+        self.engine = DQNEngine(self.model, gamma=self.GAMMA, use_target_net=True)
+        self.loss_fn = nn.SmoothL1Loss()
         
         self.use_cache = use_cache
         self.last_next_state = None
@@ -151,19 +166,19 @@ class Agent():
         negative_actions = []
         actual_equivalent_coord = self.calculate_position_box(actions)
         for i in range(0, 9):
-            copy_actions = actions.copy()
-            copy_actions.append(i)
-            new_equivalent_coord = self.calculate_position_box(copy_actions)
-            if i!=0:
+            if i != 8: # 0-7 are movement in v2
+                copy_actions = actions.copy()
+                copy_actions.append(i)
+                new_equivalent_coord = self.calculate_position_box(copy_actions)
                 reward = self.compute_reward(new_equivalent_coord, actual_equivalent_coord, ground_truth)
-            else:
-                reward = self.compute_trigger_reward(new_equivalent_coord,  ground_truth)
+            else: # 8 is trigger in v2
+                reward = self.compute_trigger_reward(actual_equivalent_coord,  ground_truth)
             
-            if reward>=0:
+            if reward >= 0:
                 positive_actions.append(i)
             else:
                 negative_actions.append(i)
-        if len(positive_actions)==0:
+        if len(positive_actions) == 0:
             return random.choice(negative_actions)
         return random.choice(positive_actions)
 
@@ -238,18 +253,19 @@ class Agent():
                 state = state.cuda()
         
         if step_count >= self.max_steps:
-            action = 0 # Action 0 is trigger in baseline
+            action = 8 # Action 8 is trigger in v2 interface
         else:
             action = self.select_action(state, valid_hist, ground_truth)
             
-        if action == 0:
+        if action == 8: # Action 8 is trigger in v2 interface
             new_mask = current_mask
-            reward = self.compute_trigger_reward(current_mask, ground_truth)
+            reward = self.compute_finish_reward(current_mask, ground_truth)
             done = True
         else:
-            self.actions_history = self.update_history(action)
-            new_mask = self.calculate_position_box_v2(action, current_mask)
+            new_mask = self.compute_mask(action, current_mask)
             reward = self.compute_reward(new_mask, current_mask, ground_truth)
+            history = history[1:] + [action]
+            self.update_history(action)
             done = False
             
         if done:
@@ -387,41 +403,83 @@ class Agent():
         return self.actions_history
 
     def calculate_position_box(self, actions, xmin=0, xmax=224, ymin=0, ymax=224):
+        # V2 Mapping: 0:Right, 1:Left, 2:Up, 3:Down, 4:Bigger, 5:Smaller, 6:Fatter, 7:Taller
         alpha_h = self.alpha * (  ymax - ymin )
         alpha_w = self.alpha * (  xmax - xmin )
-        real_x_min, real_x_max, real_y_min, real_y_max = 0, 224, 0, 224
+        real_x_min, real_x_max, real_y_min, real_y_max = xmin, xmax, ymin, ymax
 
         for r in actions:
-            if r == 1: # Right
+            if r == 0: # Right
                 real_x_min += alpha_w
                 real_x_max += alpha_w
-            if r == 2: # Left
+            elif r == 1: # Left
                 real_x_min -= alpha_w
                 real_x_max -= alpha_w
-            if r == 3: # Up 
+            elif r == 2: # Up 
                 real_y_min -= alpha_h
                 real_y_max -= alpha_h
-            if r == 4: # Down
+            elif r == 3: # Down
                 real_y_min += alpha_h
                 real_y_max += alpha_h
-            if r == 5: # Bigger
+            elif r == 4: # Bigger
                 real_y_min -= alpha_h
                 real_y_max += alpha_h
                 real_x_min -= alpha_w
                 real_x_max += alpha_w
-            if r == 6: # Smaller
+            elif r == 5: # Smaller
                 real_y_min += alpha_h
                 real_y_max -= alpha_h
                 real_x_min += alpha_w
                 real_x_max -= alpha_w
-            if r == 7: # Fatter
+            elif r == 6: # Fatter
                 real_y_min += alpha_h
                 real_y_max -= alpha_h
-            if r == 8: # Taller
+            elif r == 7: # Taller
                 real_x_min += alpha_w
                 real_x_max -= alpha_w
         real_x_min, real_x_max, real_y_min, real_y_max = self.rewrap(real_x_min), self.rewrap(real_x_max), self.rewrap(real_y_min), self.rewrap(real_y_max)
         return [real_x_min, real_x_max, real_y_min, real_y_max]
+
+    def feature_extract(self, img, history, width, height, current_mask, skip_image=False):
+        """Standardized v2-style feature extraction for legacy Agent"""
+        if not skip_image:
+            import cv2
+            x1, y1, x2, y2 = map(int, current_mask)
+            cropped_img = img[y1:y2, x1:x2]
+            if cropped_img.size == 0:
+                cropped_img = img
+            cropped_img = cv2.resize(cropped_img, (224, 224))
+            img_transposed = np.transpose(cropped_img, (2, 0, 1))
+            img_tensor = torch.from_numpy(img_transposed).float() / 255.0
+            
+            with torch.no_grad():
+                feature_tensor = self.get_features(img_tensor, torch.FloatTensor)
+            if self.use_cuda:
+                feature_tensor = feature_tensor.cpu()
+        else:
+            feature_tensor = None
+            
+        feat_hist = np.zeros(9 * 9)
+        for i, act in enumerate(history):
+            if act != -1:
+                feat_hist[i * 9 + act] = 1
+        history_tensor = torch.tensor(feat_hist).float().unsqueeze(0)
+        
+        return feature_tensor, history_tensor
+
+    def compute_mask(self, action, current_mask):
+        """Standardized v2-style mask computation for legacy Agent"""
+        # Map v2 actions (0-7) to legacy actions (1-8) for calculate_position_box
+        legacy_action = action + 1
+        return np.array(self.calculate_position_box([legacy_action], 
+                                                   xmin=current_mask[0], xmax=current_mask[2],
+                                                   ymin=current_mask[1], ymax=current_mask[3]))
+
+    def compute_iou(self, mask, ground_truth):
+        return self.intersection_over_union(mask, ground_truth)
+
+    def compute_finish_reward(self, current_mask, ground_truth):
+        return self.compute_trigger_reward(current_mask, ground_truth)
 
     def get_max_bdbox(self, ground_truth_boxes, actual_coordinates ):
         max_iou = False
