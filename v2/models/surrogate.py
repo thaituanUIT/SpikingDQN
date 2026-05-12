@@ -44,23 +44,23 @@ class SQNSurrogate(nn.Module):
         self.threshold = threshold
         self.spike_fn = SuperSpike.apply
 
-        # 1. Khởi tạo Extractor
+        # 1. Khởi tạo Backbone
         if self.extractor_name == 'vgg16':
-            self.extractor = VGG16Backbone()
+            self.backbone = VGG16Backbone()
         elif self.extractor_name == 'resnet18':
-            self.extractor = ResNetBackbone(model_name='resnet18')
+            self.backbone = ResNetBackbone(model_name='resnet18')
         elif self.extractor_name == 'fusion':
-            self.extractor = FusionBackbone(model_name='resnet18')
+            self.backbone = FusionBackbone(model_name='resnet18')
         elif self.extractor_name == 'vit':
-            self.extractor = ViTBackbone(model_name='vit_b_16')
+            self.backbone = ViTBackbone(model_name='vit_b_16')
         elif self.extractor_name == 'efficientnet':
-            self.extractor = EfficientNetBackbone(model_name='efficientnet_b0')
+            self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
         elif self.extractor_name == 'mobilenet':
-            self.extractor = MobileNetBackbone(model_name='mobilenet_v3_small')
+            self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
-            self.extractor = SimpleConvBackbone(input_channels=self.input_dim[0])
+            self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
             
-        self.fc_input_dim = self.extractor.get_output_dim() + self.history_dim
+        self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
 
         # 2. Xác định Final Layer cho FC3
         if self.dueling:
@@ -100,7 +100,7 @@ class SQNSurrogate(nn.Module):
     def extract_features(self, state):
         """Extracts CNN features, bypassing SNN and FC layers."""
         with torch.no_grad():
-            return self.extractor(state)
+            return self.backbone(state)
 
     def forward(self, state, history):
         batch_size = state.size(0)
@@ -110,7 +110,7 @@ class SQNSurrogate(nn.Module):
         if state.dim() == 2:
             features = state
         else:
-            features = self.extractor(state)
+            features = self.backbone(state)
             
         x_fc_base = torch.cat([features, history], dim=1)
 
