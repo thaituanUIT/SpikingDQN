@@ -29,14 +29,14 @@ class SuperSpike(torch.autograd.Function):
 
 class SQNSurrogate(nn.Module):
     def __init__(self, input_dim=(3, 224, 224), output_dim=9, history_dim=90, 
-                 simulation_time=10, alpha=0.9, beta=0.8, threshold=1.0, backbone_name='conv', dueling=False):
+                 simulation_time=10, alpha=0.9, beta=0.8, threshold=1.0, extractor_name='conv', dueling=False):
         super(SQNSurrogate, self).__init__()
         
         self.input_dim = input_dim
         self.output_dim = output_dim
         self.history_dim = history_dim
         self.simulation_time = simulation_time
-        self.backbone_name = backbone_name
+        self.extractor_name = extractor_name
         self.dueling = dueling
 
         self.alpha = alpha
@@ -44,23 +44,23 @@ class SQNSurrogate(nn.Module):
         self.threshold = threshold
         self.spike_fn = SuperSpike.apply
 
-        # 1. Khởi tạo Backbone
-        if self.backbone_name == 'vgg16':
-            self.backbone = VGG16Backbone()
-        elif self.backbone_name == 'resnet18':
-            self.backbone = ResNetBackbone(model_name='resnet18')
-        elif self.backbone_name == 'fusion':
-            self.backbone = FusionBackbone(model_name='resnet18')
-        elif self.backbone_name == 'vit':
-            self.backbone = ViTBackbone(model_name='vit_b_16')
-        elif self.backbone_name == 'efficientnet':
-            self.backbone = EfficientNetBackbone(model_name='efficientnet_b0')
-        elif self.backbone_name == 'mobilenet':
-            self.backbone = MobileNetBackbone(model_name='mobilenet_v3_small')
+        # 1. Khởi tạo Extractor
+        if self.extractor_name == 'vgg16':
+            self.extractor = VGG16Backbone()
+        elif self.extractor_name == 'resnet18':
+            self.extractor = ResNetBackbone(model_name='resnet18')
+        elif self.extractor_name == 'fusion':
+            self.extractor = FusionBackbone(model_name='resnet18')
+        elif self.extractor_name == 'vit':
+            self.extractor = ViTBackbone(model_name='vit_b_16')
+        elif self.extractor_name == 'efficientnet':
+            self.extractor = EfficientNetBackbone(model_name='efficientnet_b0')
+        elif self.extractor_name == 'mobilenet':
+            self.extractor = MobileNetBackbone(model_name='mobilenet_v3_small')
         else:
-            self.backbone = SimpleConvBackbone(input_channels=self.input_dim[0])
+            self.extractor = SimpleConvBackbone(input_channels=self.input_dim[0])
             
-        self.fc_input_dim = self.backbone.get_output_dim() + self.history_dim
+        self.fc_input_dim = self.extractor.get_output_dim() + self.history_dim
 
         # 2. Xác định Final Layer cho FC3
         if self.dueling:
@@ -100,7 +100,7 @@ class SQNSurrogate(nn.Module):
     def extract_features(self, state):
         """Extracts CNN features, bypassing SNN and FC layers."""
         with torch.no_grad():
-            return self.backbone(state)
+            return self.extractor(state)
 
     def forward(self, state, history):
         batch_size = state.size(0)
@@ -110,7 +110,7 @@ class SQNSurrogate(nn.Module):
         if state.dim() == 2:
             features = state
         else:
-            features = self.backbone(state)
+            features = self.extractor(state)
             
         x_fc_base = torch.cat([features, history], dim=1)
 
