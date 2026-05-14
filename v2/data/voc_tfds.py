@@ -1,7 +1,7 @@
 import numpy as np
 
 class TFDSVOC2007TestDataset:
-    def __init__(self, target_class="mixing", num_samples=None):
+    def __init__(self, target_class="mixing", num_samples=None, seed=42):
         try:
             import tensorflow_datasets as tfds
             import tensorflow as tf
@@ -11,14 +11,22 @@ class TFDSVOC2007TestDataset:
             os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
             tf.get_logger().setLevel('ERROR')
             tfds.disable_progress_bar()
+            
+            if seed is not None:
+                tf.random.set_seed(seed)
         except ImportError:
             raise ImportError("Please install tensorflow and tensorflow_datasets to use TFDSVOC2007TestDataset")
 
-        print(f"Loading TFDS VOC2007 test dataset (Target: {target_class})...")
+        print(f"Loading TFDS VOC2007 test dataset (Target: {target_class}, Seed: {seed})...")
         self.target_class = target_class
+        self.seed = seed
         
         # Download and load the dataset
         ds, info = tfds.load('voc/2007', split='test', with_info=True, data_dir="./dataset")
+        
+        if seed is not None:
+            # Shuffle with a fixed buffer size to ensure consistency when picking num_samples
+            ds = ds.shuffle(10000, seed=seed, reshuffle_each_iteration=False)
         self.class_names = info.features['objects'].feature['label'].names
         
         self.samples = []
